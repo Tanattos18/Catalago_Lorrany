@@ -91,7 +91,7 @@
     "diasSemEncomenda": []
   },
   "entrega": {
-    "taxa": null,
+    "taxa": 25,
     "tempo": "",
     "pedidoMinimo": 0,
     "gratisAcima": 0,
@@ -335,7 +335,7 @@
             },
             {
               "nome": "Meio cento (50 un.)",
-              "preco": 70.0
+              "preco": 70
             }
           ],
           "sabores": {
@@ -359,7 +359,7 @@
             },
             {
               "nome": "Meio cento (50 un.)",
-              "preco": 80.0
+              "preco": 80
             }
           ]
         },
@@ -375,7 +375,7 @@
             },
             {
               "nome": "Meio cento (50 un.)",
-              "preco": 90.0
+              "preco": 90
             }
           ]
         },
@@ -394,7 +394,7 @@
             },
             {
               "nome": "Meio cento (50 un.)",
-              "preco": 100.0
+              "preco": 100
             }
           ]
         }

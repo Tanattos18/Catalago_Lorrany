@@ -1,0 +1,26 @@
+{
+  "versao": 1,
+  "usuario": "Admin",
+  "email": "joas.s.nk1@gmail.com",
+  "iteracoes": 310000,
+  "senha": {
+    "salt": "2oJ1wbXVUGOpdXM6gQV4ag==",
+    "iv": "xa2Nvr33uzpNQ9wZ",
+    "dados": "6duLucZQg5C9dpxwWLgdSTcRgE0syTRaiP+cWIWUh3NACKuUflkUaJxvWS0/I8pH"
+  },
+  "recuperacao": {
+    "salt": "FfqzQLWzWpbQ6HroGxw8NQ==",
+    "iv": "HdPX8z/r3dC0pWIe",
+    "dados": "HkJE2EAOoHHnbQVswCeQ0vyjVWvfYvy6vgy+0XrGNLEhdMvExeGJpKlYVmlaQkJS"
+  },
+  "token": {
+    "iv": "4v5/ljsEMjDPPemH",
+    "dados": "PGfd24mNikRJlrbsKbKF3v6WmZ5qNrZRdmytGdf1wLjAH4MA3SVcYh+EIjYSK3lbcqar7dcqcPHprjWG6Zgs93nk3krCv8CBRc85+mDS7MaAL3a3UV/ZsWTGGxCPK/LoiU2I2S96zTmXOwx2vw=="
+  },
+  "repo": {
+    "owner": "Tanattos18",
+    "repo": "Catalago_Lorrany",
+    "branch": "main"
+  },
+  "validadeToken": "2027-01-29"
+}

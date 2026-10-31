@@ -1,0 +1,97 @@
+/* Layout "Confeitaria": derivado do layout Impacto, em tons de rosa, com o logo em destaque. */
+:root {
+  --pri: #d6457a;
+  --pri-ink: #ffffff;
+  --sec: #f7c6d6;
+  --bg: #fff7f9;
+  --surface: #ffffff;
+  --text: #4a2318;
+  --muted: #8a6a62;
+  --line: rgba(214, 69, 122, .16);
+  --radius: 18px;
+  --font-title: 'Fraunces', Georgia, serif;
+  --font-script: 'Dancing Script', cursive;
+  --font-body: 'Nunito', system-ui, sans-serif;
+  --shadow: 0 12px 30px rgba(214, 69, 122, .16);
+}
+.carregando { text-align: center; padding: 30vh 16px; color: var(--muted); }
+
+/* capa */
+.hero { min-height: min(92vh, 780px); display: flex; flex-direction: column; background: var(--pri) center / cover; color: #fff; }
+.topbar { display: flex; align-items: center; gap: 12px; max-width: var(--max); width: 100%; margin: 0 auto; padding: 18px 16px; }
+.brand { flex: 1; font-family: var(--font-script); font-size: 1.6rem; font-weight: 700; }
+.hero-inner { margin: auto auto 0; max-width: var(--max); width: 100%; padding: 24px 16px 56px; }
+.logo-hero { width: 128px; height: 128px; background: #fff; border: 4px solid #fff; box-shadow: 0 8px 26px rgba(0, 0, 0, .25); margin-bottom: 18px; }
+.hero .status, .hero .chips li { background: rgba(255, 255, 255, .18); backdrop-filter: blur(6px); }
+.hero .chips li .ic { color: #fff; }
+.eyebrow { margin: 16px 0 0; text-transform: uppercase; letter-spacing: .22em; font-size: .8rem; font-weight: 800; color: var(--sec); }
+.hero h1 { font-family: var(--font-script); font-size: clamp(3rem, 11vw, 6rem); font-weight: 700; line-height: 1; margin-top: 6px; text-shadow: 0 3px 18px rgba(0, 0, 0, .25); }
+.slogan { font-size: clamp(1.05rem, 2.5vw, 1.3rem); max-width: 38ch; opacity: .95; margin: 12px 0 24px; }
+.hero-ctas { display: flex; flex-wrap: wrap; gap: 12px; }
+.hero .btn-ghost { color: #fff; }
+
+/* destaque */
+.promo { background: linear-gradient(120deg, var(--sec), #fde3ec); color: var(--text); border: 1px solid var(--line); }
+.promo-badge { background: var(--pri); }
+
+/* catálogo */
+main > section > h2, .menu-head h2 { font-family: var(--font-title); }
+.cat h3 { font-size: clamp(1.35rem, 3.6vw, 1.8rem); }
+.items { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+.item { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; transition: transform .2s, box-shadow .2s; }
+.item:hover { transform: translateY(-4px); box-shadow: var(--shadow); }
+.item-img { position: relative; aspect-ratio: 4/3; overflow: hidden; background: var(--sec); }
+.item-img img { width: 100%; height: 100%; object-fit: cover; transition: transform .4s; }
+.item:hover .item-img img { transform: scale(1.06); }
+.item-img.noimg { aspect-ratio: auto; background: none; }
+.item-img .tags { position: absolute; left: 12px; top: 12px; }
+.item-img.noimg .tags { position: static; padding: 14px 18px 0; }
+.item-body { flex: 1; display: flex; flex-direction: column; padding: 16px 18px 18px; }
+.item-body h4 { font-size: 1.08rem; font-family: var(--font-body); font-weight: 800; }
+.item-foot { margin-top: auto; padding-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.price b { font-size: 1.3rem; }
+.add { padding: 10px 16px; }
+.add-off { background: var(--line); color: var(--muted); cursor: default; }
+.item.esgotado { opacity: .7; cursor: default; }
+.item.esgotado img { filter: grayscale(.6); }
+.tag { background: #fff; color: var(--pri); box-shadow: 0 2px 6px rgba(0, 0, 0, .12); }
+.tag-mais-pedido { background: var(--pri); color: #fff; }
+.tag-esgotado { background: #4a2318; color: #fff; }
+.tag-novo { background: #2b7de9; color: #fff; }
+
+/* modal de bolo por kg */
+.preco-kg { font-family: var(--font-title); font-size: 1.4rem; color: var(--pri); margin: 10px 0 0; }
+.preco-kg small { font-size: .85rem; color: var(--muted); font-family: var(--font-body); }
+.pesos { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.peso input { position: absolute; opacity: 0; }
+.peso span { display: grid; gap: 1px; text-align: center; padding: 10px 6px; border: 2px solid var(--line); border-radius: 12px; cursor: pointer; }
+.peso small { color: var(--muted); font-size: .75rem; }
+.peso input:checked + span { border-color: var(--pri); background: #fde3ec; }
+.peso input:focus-visible + span { outline: 2px solid var(--pri); }
+
+/* pagamento */
+.card-pag .btn-sm { margin-top: 12px; }
+.obs-pag { color: var(--muted); font-size: .9rem; margin: 10px 0 0; }
+.pix-box { margin-top: 16px; padding: 14px; border: 1px dashed var(--pri); border-radius: 14px; background: #fff; }
+.pix-tit { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
+.pix-tit .ic { color: var(--pri); }
+.pix-tit-nome { font-size: .85rem; color: var(--muted); margin: 8px 0 0; }
+.copiar { display: flex; gap: 8px; align-items: center; }
+.copiar code { flex: 1; min-width: 0; padding: 9px 12px; background: var(--bg); border-radius: 10px; font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.copiar code.cc { font-size: .72rem; }
+.copiar .btn { flex: none; }
+.pix-qr { display: flex; justify-content: center; margin-top: 12px; }
+.pix-qr img, .pix-qr canvas { width: 180px; height: 180px; }
+.contas { display: grid; gap: 10px; }
+.conta { display: grid; gap: 2px; padding: 12px 14px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); font-size: .9rem; }
+.drawer .pix-box, .drawer .contas { margin: 0; }
+.aviso { background: #fde3ec; border-left-color: var(--pri); }
+
+/* barras */
+.previa-bar { position: sticky; top: 0; z-index: 60; background: #4a2318; color: #fff; text-align: center; padding: 8px 16px; font-size: .9rem; }
+.previa-bar a { color: #ffd6e4; }
+.mesa-bar { background: var(--sec); color: var(--text); }
+.drawer-foot .total small { font-size: .7rem; color: var(--muted); font-weight: 600; }
+.card td em { background: var(--pri); }
+.rodape .logo-sm { background: #fff; border: 1px solid var(--line); }
+.creditos a { color: var(--pri); }

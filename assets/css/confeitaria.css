@@ -95,3 +95,18 @@ main > section > h2, .menu-head h2 { font-family: var(--font-title); }
 .card td em { background: var(--pri); }
 .rodape .logo-sm { background: #fff; border: 1px solid var(--line); }
 .creditos a { color: var(--pri); }
+
+/* rendimento, sabores, personalização */
+.rend { margin: 6px 0 0; font-size: .82rem; font-weight: 700; color: var(--pri); }
+.opc { font-style: normal; font-weight: 400; font-size: .75rem; color: var(--muted); }
+.obs input { font-weight: 400; }
+.sabores input:disabled + span { opacity: .45; }
+
+/* depoimentos */
+.depo-lista { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.depo { margin: 0; padding: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); display: grid; gap: 14px; }
+.depo blockquote { margin: 0; font-size: 1rem; line-height: 1.55; }
+.depo blockquote::before { content: '\201C'; display: block; font-family: var(--font-title); font-size: 2.6rem; line-height: .6; color: var(--pri); margin-bottom: 6px; }
+.depo figcaption { display: flex; align-items: center; gap: 10px; }
+.depo figcaption img, .depo-ini { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+.depo-ini { display: grid; place-items: center; background: var(--sec); color: var(--pri); font-weight: 800; }

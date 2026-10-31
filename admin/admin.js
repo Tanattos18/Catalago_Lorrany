@@ -2,25 +2,35 @@
  * Painel administrativo — Doçuras da Lorrany
  * Edita o dados.json do catálogo (loja, contato, horários, pedidos, pagamentos e produtos)
  * e publica direto no repositório do GitHub (GitHub Pages atualiza o site em 1–2 minutos).
+ *
+ * Acesso: usuário e senha (primeiro acesso: Admin / Admin, com troca obrigatória).
+ * O token do GitHub fica no admin/acesso.json criptografado (AES-GCM) com uma chave que só
+ * abre com a senha ou com o código de recuperação enviado para o e-mail da dona da loja.
  * O rascunho fica salvo no aparelho até ser publicado.
  */
 (function () {
   'use strict';
 
   var RASCUNHO = 'lorrany:rascunho';
-  var GH_KEY = 'lorrany:github';
+  var SESSAO = 'lorrany:sessao';
   var PADRAO_GH = { owner: 'Tanattos18', repo: 'Catalago_Lorrany', branch: 'main' };
+  var USUARIO_PADRAO = 'Admin', SENHA_PADRAO = 'Admin';
+  var ITERACOES = 310000;
   var DIAS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
   var ABAS = [
     ['loja', 'Loja'], ['catalogo', 'Catálogo'], ['contato', 'Contato e endereço'], ['horarios', 'Horários'],
-    ['pedidos', 'Pedidos e entrega'], ['pagamentos', 'Pagamentos'], ['publicar', 'Publicar']
+    ['pedidos', 'Pedidos e agenda'], ['pagamentos', 'Pagamentos'], ['publicar', 'Publicar'], ['conta', 'Minha conta']
   ];
 
   var D = null;           // dados em edição
+  var A = null;           // admin/acesso.json (null = primeiro acesso)
+  var S = lerSessao();    // { usuario, token, owner, repo, branch, k }
   var alterado = false;   // há mudanças não publicadas
+  var publicado = null;
   var aba = 'loja';
   var abertos = {};       // <details> abertos no catálogo
-  var gh = lerGH();
+  var validade = null;    // { dias, data } do token
+  var instalar = null;    // evento beforeinstallprompt
   var app = document.getElementById('admin');
 
   /* ---------- utilidades ---------- */
@@ -33,6 +43,8 @@
   function $(s, el) { return (el || document).querySelector(s); }
   function $$(s, el) { return Array.prototype.slice.call((el || document).querySelectorAll(s)); }
   function slug(s) { return String(s || 'foto').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'foto'; }
+  function dataBR(iso) { var p = String(iso || '').split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : iso; }
+  function hojeISO() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   function imgSrc(v, w) {
     if (!v) return '';
     if (/^(data:|https?:)/.test(v)) return v;
@@ -60,16 +72,17 @@
     var x = lista[i]; lista[i] = lista[j]; lista[j] = x;
   }
   function clonar(o) { return JSON.parse(JSON.stringify(o)); }
-  function lerGH() {
-    try { return JSON.parse(localStorage.getItem(GH_KEY) || sessionStorage.getItem(GH_KEY)) || null; } catch (e) { return null; }
+  function lerSessao() {
+    try { return JSON.parse(localStorage.getItem(SESSAO) || sessionStorage.getItem(SESSAO)) || null; } catch (e) { return null; }
   }
-  function salvarGH(v, lembrar) {
+  function salvarSessao(v, lembrar) {
     try {
-      localStorage.removeItem(GH_KEY); sessionStorage.removeItem(GH_KEY);
-      if (v) (lembrar ? localStorage : sessionStorage).setItem(GH_KEY, JSON.stringify(v));
+      localStorage.removeItem(SESSAO); sessionStorage.removeItem(SESSAO);
+      if (v) (lembrar ? localStorage : sessionStorage).setItem(SESSAO, JSON.stringify(v));
     } catch (e) { /* sem armazenamento */ }
-    gh = v;
+    S = v;
   }
+  function lembrado() { try { return !!localStorage.getItem(SESSAO); } catch (e) { return false; } }
   function salvarRascunho() {
     alterado = true;
     try { localStorage.setItem(RASCUNHO, JSON.stringify(D)); }
@@ -78,9 +91,129 @@
   }
   var toastTimer;
   function toast(msg, ms) {
-    var el = $('.toast'); if (!el) return;
+    var el = $('.toast');
+    if (!el) { el = document.createElement('div'); el.className = 'toast'; document.body.appendChild(el); }
     el.textContent = msg; el.hidden = false; el.classList.add('show');
     clearTimeout(toastTimer); toastTimer = setTimeout(function () { el.classList.remove('show'); el.hidden = true; }, ms || 2600);
+  }
+  function carregando(sim, txt) {
+    var el = $('.carregador');
+    if (!el) { el = document.createElement('div'); el.className = 'carregador'; el.innerHTML = '<div><i></i><p></p></div>'; document.body.appendChild(el); }
+    $('p', el).textContent = txt || 'Aguarde...';
+    el.hidden = !sim;
+  }
+
+  /* ---------- criptografia (WebCrypto) ---------- */
+  var enc = new TextEncoder(), dec = new TextDecoder();
+  function b64(buf) { var s = '', b = new Uint8Array(buf); for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s); }
+  function unb64(s) { var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
+  function aleatorio(n) { return crypto.getRandomValues(new Uint8Array(n)); }
+  function derivar(segredo, salt, iter) {
+    return crypto.subtle.importKey('raw', enc.encode(segredo), 'PBKDF2', false, ['deriveKey']).then(function (base) {
+      return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt, iterations: iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    });
+  }
+  function chaveK(raw) { return crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']); }
+  function cifrar(chave, bytes) {
+    var iv = aleatorio(12);
+    return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, chave, bytes).then(function (c) { return { iv: b64(iv), dados: b64(c) }; });
+  }
+  function decifrar(chave, o) {
+    return crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(o.iv) }, chave, unb64(o.dados)).then(function (b) { return new Uint8Array(b); });
+  }
+  // guarda a chave K protegida por um segredo (senha ou código de recuperação)
+  function embrulhar(kRaw, segredo) {
+    var salt = aleatorio(16);
+    return derivar(segredo, salt, ITERACOES).then(function (ch) { return cifrar(ch, kRaw); })
+      .then(function (c) { return { salt: b64(salt), iv: c.iv, dados: c.dados }; });
+  }
+  function desembrulhar(w, segredo) {
+    return derivar(segredo, unb64(w.salt), A.iteracoes || ITERACOES).then(function (ch) { return decifrar(ch, w); });
+  }
+  function cifrarToken(kRaw, token) { return chaveK(kRaw).then(function (k) { return cifrar(k, enc.encode(token)); }); }
+  function decifrarToken(kRaw) { return chaveK(kRaw).then(function (k) { return decifrar(k, A.token); }).then(function (b) { return dec.decode(b); }); }
+  var ALFABETO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  function novoCodigo() {
+    var b = aleatorio(16), s = '';
+    for (var i = 0; i < 16; i++) s += ALFABETO[b[i] % 32] + (i % 4 === 3 && i < 15 ? '-' : '');
+    return s;
+  }
+  function normCodigo(s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+  function mascararEmail(e) {
+    var p = String(e || '').split('@');
+    return p.length === 2 ? p[0].slice(0, 2) + '•••••@' + p[1] : '';
+  }
+
+  /* ---------- GitHub ---------- */
+  function api(caminho, opts, cred) {
+    opts = opts || {}; cred = cred || S;
+    return fetch('https://api.github.com/repos/' + cred.owner + '/' + cred.repo + caminho, {
+      method: opts.method || 'GET',
+      headers: { Authorization: 'Bearer ' + cred.token, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok) { var e = new Error(j.message || 'Erro ' + r.status); e.status = r.status; throw e; }
+        if (opts.headers) j.__exp = r.headers.get('github-authentication-token-expiration');
+        return j;
+      });
+    });
+  }
+  function validarToken(cred) {
+    return api('', { headers: true }, cred).then(function (r) {
+      if (!r.permissions || !r.permissions.push) throw new Error('Este token não tem permissão de escrita no repositório.');
+      return r;
+    }).catch(function (e) {
+      if (e.status === 401) throw new Error('Token inválido ou expirado.');
+      if (e.status === 404) throw new Error('Repositório não encontrado para este token.');
+      throw e;
+    });
+  }
+  // grava vários arquivos num único commit
+  function commitar(arquivos, mensagem, cred) {
+    cred = cred || S;
+    var base;
+    return api('/git/ref/heads/' + cred.branch, null, cred).then(function (r) {
+      base = r.object.sha;
+      return api('/git/commits/' + base, null, cred);
+    }).then(function (commit) {
+      return Promise.all(arquivos.map(function (a) {
+        return api('/git/blobs', { method: 'POST', body: a.base64 ? { content: a.base64, encoding: 'base64' } : { content: a.texto, encoding: 'utf-8' } }, cred)
+          .then(function (b) { return { path: a.path, mode: '100644', type: 'blob', sha: b.sha }; });
+      })).then(function (tree) { return api('/git/trees', { method: 'POST', body: { base_tree: commit.tree.sha, tree: tree } }, cred); });
+    }).then(function (tree) {
+      return api('/git/commits', { method: 'POST', body: { message: mensagem, tree: tree.sha, parents: [base] } }, cred);
+    }).then(function (c) {
+      return api('/git/refs/heads/' + cred.branch, { method: 'PATCH', body: { sha: c.sha } }, cred);
+    });
+  }
+  function salvarAcesso(novo, cred, msg) {
+    return commitar([{ path: 'admin/acesso.json', texto: JSON.stringify(novo, null, 2) + '\n' }], msg || 'Atualiza acesso do painel', cred).then(function () { A = novo; });
+  }
+  function carregarAcesso() {
+    return fetch('acesso.json?v=' + Date.now(), { cache: 'no-store' }).then(function (r) {
+      if (r.status === 404) return null;
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
+  function conferirValidade() {
+    if (!S) return;
+    api('', { headers: true }).then(function (r) {
+      var data = r.__exp ? new Date(r.__exp.replace(' UTC', 'Z').replace(' ', 'T')) : A && A.validadeToken ? new Date(A.validadeToken + 'T23:59:59') : null;
+      validade = data && !isNaN(data) ? { data: data, dias: Math.ceil((data - new Date()) / 864e5) } : null;
+      alerta();
+    }).catch(function (e) {
+      if (e.status === 401) { validade = { dias: -1 }; alerta(); }
+    });
+  }
+  function alerta() {
+    var el = $('.alerta'); if (!el) return;
+    var txt = '';
+    if (validade && validade.dias < 0) txt = 'A chave de publicação (token do GitHub) venceu. Peça para renovar em "Minha conta" → Trocar token.';
+    else if (validade && validade.dias <= 15) txt = 'A chave de publicação vence em ' + validade.dias + ' dia(s) (' + validade.data.toLocaleDateString('pt-BR') + '). Renove em "Minha conta" para não parar de publicar.';
+    el.innerHTML = txt ? esc(txt) + ' <button type="button" data-aba="conta">Abrir</button>' : '';
+    el.hidden = !txt;
   }
 
   /* ---------- campos ---------- */
@@ -123,6 +256,10 @@
   function grupo(tit, html, desc) {
     return '<section class="grupo"><h2>' + tit + '</h2>' + (desc ? '<p class="desc">' + desc + '</p>' : '') + html + '</section>';
   }
+  function senhaCampo(rot, nome, dica, auto) {
+    return campo(rot, '<span class="senha"><input name="' + nome + '" type="password" required autocomplete="' + (auto || 'new-password') + '">' +
+      '<button type="button" data-ver-senha aria-label="Mostrar senha">👁</button></span>', dica);
+  }
 
   /* ---------- abas ---------- */
   var RENDER = {
@@ -138,6 +275,13 @@
             return '<div class="gal-item">' + fFoto('Foto ' + (i + 1), 'galeria.' + i, 900) +
               '<button type="button" class="btn btn-sm btn-ghost" data-acao="remover" data-k="galeria.' + i + '">Excluir</button></div>';
           }).join('') + '</div><button type="button" class="btn btn-sm" data-acao="add-galeria">+ Adicionar foto à galeria</button>') +
+        grupo('Depoimentos de clientes', (D.depoimentos || []).map(function (d, i) {
+          var k = 'depoimentos.' + i;
+          return '<div class="bloco">' + fFoto('Foto (opcional)', k + '.foto', 400) + fTexto('Nome do cliente', k + '.nome') +
+            fArea('O que o cliente disse', k + '.texto', '', 3) +
+            '<button type="button" class="btn btn-sm btn-ghost" data-acao="remover" data-k="' + k + '">Excluir depoimento</button></div>';
+        }).join('') + '<button type="button" class="btn btn-sm" data-acao="add-depoimento">+ Adicionar depoimento</button>',
+        'Copie elogios do WhatsApp ou do Instagram (peça autorização ao cliente). Sem depoimentos, a seção não aparece no site.') +
         grupo('Cores', '<div class="cores">' + fCor('Cor principal', 'tema.primaria') + fCor('Cor de destaque', 'tema.secundaria') +
           fCor('Fundo', 'tema.fundo') + fCor('Texto', 'tema.texto') + '</div>' +
           '<button type="button" class="btn btn-sm btn-ghost" data-acao="cores-padrao">Voltar às cores originais</button>');
@@ -167,6 +311,7 @@
 
     pedidos: function () {
       var p = D.pedidos;
+      var sem = p.diasSemEncomenda || [];
       return grupo('Como o cliente pode pedir',
         fCheck('Entrega', 'pedidos.entrega', 'O cliente informa o endereço no pedido.', true) +
         fCheck('Retirada no local', 'pedidos.retirada', 'O cliente busca no seu endereço.', true) +
@@ -177,6 +322,16 @@
           fCheck('Trabalho por encomenda', 'pedidos.encomenda', 'Pede data e horário de entrega/retirada no pedido.', true) +
           (p.encomenda ? fNum('Antecedência mínima (dias)', 'pedidos.antecedenciaDias', 'O calendário do cliente só libera datas a partir deste prazo.', ' step="1"') +
             fArea('Aviso para o cliente', 'pedidos.avisoEncomenda', '', 2) : '')) +
+        (p.encomenda ? grupo('Agenda',
+          '<p class="rot">Dias da semana sem encomenda</p><div class="dias">' + DIAS.map(function (d, i) {
+            return '<label class="check mini"><input type="checkbox" data-dia-sem="' + i + '"' + (sem.indexOf(i) > -1 ? ' checked' : '') + '><span><b>' + d.slice(0, 3) + '</b></span></label>';
+          }).join('') + '</div>' +
+          '<p class="rot">Datas lotadas ou de folga</p><div class="massa-preco"><input type="date" min="' + hojeISO() + '" data-nova-data>' +
+          '<button type="button" class="btn btn-sm btn-pri" data-acao="add-data">Bloquear data</button></div>' +
+          '<div class="chips">' + (p.datasBloqueadas || []).map(function (d, i) {
+            return '<span class="chip">' + dataBR(d) + ' <button type="button" data-acao="remover" data-k="pedidos.datasBloqueadas.' + i + '" aria-label="Liberar ' + dataBR(d) + '">×</button></span>';
+          }).join('') + '</div>',
+          'Quando a agenda de um dia encher, bloqueie a data aqui e publique: o cliente não consegue mais escolher esse dia. Datas que já passaram somem sozinhas.') : '') +
         (p.entrega ? grupo('Entrega',
           fNum('Taxa de entrega (R$)', 'entrega.taxa', 'Deixe em branco para "a combinar". Use 0 para entrega grátis.') +
           fNum('Pedido mínimo para entrega (R$)', 'entrega.pedidoMinimo', '0 = sem mínimo.') +
@@ -218,25 +373,54 @@
             return '<div class="bloco linha-massa">' + fTexto('Massa', k + '.nome') + fNum('Acréscimo (R$)', k + '.acrescimo') +
               fCheck('Por kg', k + '.porKg', 'Multiplica o acréscimo pelo peso.') +
               '<button type="button" class="btn btn-sm btn-ghost" data-acao="remover" data-k="' + k + '">Excluir</button></div>';
-          }).join('') + '<button type="button" class="btn btn-sm" data-acao="add-massa">+ Adicionar massa</button>',
+          }).join('') + '<button type="button" class="btn btn-sm" data-acao="add-massa">+ Adicionar massa</button>' +
+          '<p class="rot">Personalização</p>' +
+          fLista('Coberturas', 'bolosKg.coberturas', 'Uma por linha (ex.: Chantilly). Deixe vazio para não perguntar.') +
+          fCheck('Pedir nome e idade para escrever no bolo', 'bolosKg.pedirNome') +
+          fCheck('Oferecer topo de bolo personalizado', 'bolosKg.topo.ativo', '', true) +
+          (kg.topo && kg.topo.ativo ? fNum('Preço do topo (R$)', 'bolosKg.topo.preco') : ''),
         'Vale para todos os produtos com preço "por kg".');
     },
 
     publicar: function () {
-      var conectado = gh && gh.token;
       return grupo('Publicar no site',
         '<p class="desc">' + (alterado ? 'Você tem <b>alterações não publicadas</b>. ' : 'Tudo publicado. ') +
         'Depois de publicar, o site atualiza em 1 a 2 minutos.</p>' +
         '<div class="acoes"><button type="button" class="btn" data-acao="previa">Pré-visualizar</button>' +
-        '<button type="button" class="btn btn-pri" data-acao="publicar"' + (conectado ? '' : ' disabled') + '>Publicar agora</button></div>' +
-        (conectado ? '' : '<p class="aviso">Conecte o GitHub abaixo para publicar.</p>')) +
-        grupo('Conexão com o GitHub', conectado ?
-          '<p class="desc">Conectado ao repositório <b>' + esc(gh.owner + '/' + gh.repo) + '</b> (' + esc(gh.branch) + ').</p>' +
-          '<button type="button" class="btn btn-ghost" data-acao="sair">Desconectar este aparelho</button>' : loginForm()) +
+        '<button type="button" class="btn btn-pri" data-acao="publicar">Publicar agora</button></div>') +
         grupo('Cópia de segurança',
           '<div class="acoes"><button type="button" class="btn" data-acao="exportar">Baixar backup (.json)</button>' +
           '<label class="btn">Restaurar backup<input type="file" accept="application/json,.json" data-acao-arquivo="importar" hidden></label></div>' +
           '<button type="button" class="btn btn-ghost btn-sm" data-acao="descartar">Descartar alterações não publicadas</button>');
+    },
+
+    conta: function () {
+      var ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      return grupo('Dados de acesso',
+        '<form class="login" data-form="dados-acesso">' +
+        campo('Usuário', '<input name="usuario" required autocomplete="username" value="' + esc(A.usuario) + '">') +
+        campo('E-mail de recuperação', '<input name="email" type="email" required value="' + esc(A.email) + '">', 'É para este e-mail que vai o código de recuperação de senha.') +
+        '<button class="btn btn-pri">Salvar</button></form>') +
+        grupo('Trocar senha', '<form class="login" data-form="trocar-senha">' +
+          senhaCampo('Senha atual', 'atual', '', 'current-password') + senhaCampo('Nova senha', 'nova', 'Mínimo de 8 caracteres.') + senhaCampo('Repita a nova senha', 'nova2') +
+          '<button class="btn btn-pri">Trocar senha</button></form>') +
+        grupo('Código de recuperação',
+          '<p class="desc">Se você esquecer a senha, o código que está no seu e-mail (<b>' + esc(mascararEmail(A.email)) + '</b>) libera uma senha nova. ' +
+          'Perdeu o e-mail? Gere um código novo: o antigo deixa de valer.</p>' +
+          '<button type="button" class="btn" data-acao="novo-codigo">Gerar novo código</button>') +
+        grupo('Chave de publicação (GitHub)',
+          '<p class="desc">Repositório <b>' + esc(S.owner + '/' + S.repo) + '</b> (' + esc(S.branch) + ')' +
+          (validade && validade.data ? ' · vence em <b>' + validade.data.toLocaleDateString('pt-BR') + '</b>' : '') + '.</p>' +
+          '<details class="avancado"><summary>Trocar token</summary><form class="login" data-form="trocar-token">' +
+          campo('Novo token', '<input name="token" type="password" autocomplete="off" required placeholder="github_pat_...">') +
+          campo('Validade', '<input name="validade" type="date">', 'A data que o GitHub mostrou ao criar o token.') +
+          '<button class="btn btn-pri">Salvar token</button></form></details>') +
+        grupo('Aplicativo no celular',
+          (instalar ? '<button type="button" class="btn btn-pri" data-acao="instalar">Instalar o painel como aplicativo</button>' :
+            '<p class="desc">' + (ios ? 'No iPhone: toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>.' :
+              'No Android: abra o menu do Chrome (⋮) e toque em <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.') + '</p>')) +
+        grupo('Sair', '<p class="desc">' + (lembrado() ? 'Este aparelho está lembrando o acesso.' : 'O acesso termina quando fechar o navegador.') + '</p>' +
+          '<button type="button" class="btn btn-ghost" data-acao="sair">Sair do painel</button>');
     }
   };
 
@@ -272,16 +456,19 @@
       (it.esgotado ? ' · <em>esgotado</em>' : '') + (it.oculto ? ' · <em>oculto</em>' : '') + '</small></span>' + setas(k) + '</summary>' +
       '<div class="prod-corpo">' + fFoto('Foto do produto', k + '.img', 1000) +
       fTexto('Nome', k + '.nome') + fArea('Descrição', k + '.desc', '', 2) +
+      fTexto('Rendimento', k + '.rendimento', 'Opcional. Ex.: Forma de 24 cm, serve 12 pessoas.') +
       campo('Tipo de preço', '<select data-tipo="' + k + '">' + [['unidade', 'Preço fixo (unidade, cento...)'], ['kg', 'Por kg (bolo confeitado)'], ['opcoes', 'Com opções/tamanhos']].map(function (o) {
         return '<option value="' + o[0] + '"' + (tipo === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
       }).join('') + '</select>') +
       (tipo === 'kg' ? fNum('Preço por kg (R$)', k + '.precoKg') : '') +
       (tipo === 'unidade' ? '<div class="linha">' + fNum('Preço (R$)', k + '.preco') + fTexto('Vendido por', k + '.unidade', 'Ex.: cento, unidade, fatia. Opcional.') + '</div>' : '') +
-      (tipo === 'opcoes' ? '<p class="rot">Opções</p>' + (it.opcoes || []).map(function (o, oi) {
+      (tipo === 'opcoes' ? fTexto('Título das opções', k + '.opcoesTitulo', 'Ex.: Quantidade, Tamanho.') + (it.opcoes || []).map(function (o, oi) {
         var ko = k + '.opcoes.' + oi;
         return '<div class="linha bloco">' + fTexto('Opção', ko + '.nome') + fNum('Preço (R$)', ko + '.preco') +
           '<button type="button" class="btn btn-sm btn-ghost" data-acao="remover" data-k="' + ko + '">×</button></div>';
       }).join('') + '<button type="button" class="btn btn-sm" data-acao="add-opcao" data-k="' + k + '">+ Opção</button>' : '') +
+      '<div class="linha linha-sabor">' + fLista('Sabores para o cliente escolher', k + '.sabores.lista', 'Um por linha. Vazio = sem escolha de sabor.') +
+      fNum('Máximo de sabores', k + '.sabores.max', '', ' step="1"') + '</div>' +
       fNum('Preço antigo (R$)', k + '.precoAntigo', 'Opcional: aparece riscado, para promoções.') +
       campo('Etiquetas', '<input data-k="' + k + '.tags" data-t="virgulas" value="' + esc((it.tags || []).join(', ')) + '">', 'Separe por vírgula. Ex.: Mais pedido, Novo') +
       fCheck('Esgotado', k + '.esgotado', 'Aparece no site, mas não pode ser pedido.') +
@@ -291,30 +478,179 @@
       '</div></details>';
   }
 
-  function loginForm() {
-    var g = gh || PADRAO_GH;
-    return '<form class="login" data-form="login">' +
-      '<p class="desc">Cole o <b>token de acesso</b> do GitHub (só precisa fazer uma vez por aparelho).</p>' +
+  /* ---------- telas de acesso ---------- */
+  function tela(html) {
+    app.innerHTML = '<div class="acesso"><img class="acesso-logo" src="../assets/img/logo.png" alt="Doçuras da Lorrany"><h1>Painel da loja</h1>' + html + '</div>';
+    var f = $('input', app); if (f) f.focus();
+  }
+  function telaLogin(msg) {
+    tela('<form class="login cartao" data-form="login">' + (msg ? '<p class="aviso">' + esc(msg) + '</p>' : '') +
+      campo('Usuário', '<input name="usuario" required autocomplete="username" autocapitalize="none">') +
+      senhaCampo('Senha', 'senha', '', 'current-password') +
+      '<label class="check"><input type="checkbox" name="lembrar" checked><span><b>Manter conectado neste aparelho</b><small>Desmarque em aparelhos de outras pessoas.</small></span></label>' +
+      '<button class="btn btn-pri">Entrar</button>' +
+      '<button type="button" class="link" data-acao="esqueci">Esqueci minha senha</button></form>');
+  }
+  function telaPrimeiroAcesso() {
+    tela('<form class="login cartao" data-form="primeiro">' +
+      '<p class="aviso">Primeiro acesso: crie a sua senha e conecte a publicação. Depois disso, "Admin / Admin" deixa de funcionar.</p>' +
+      campo('Usuário', '<input name="usuario" required autocomplete="username" value="' + USUARIO_PADRAO + '">', 'Pode manter "Admin" ou trocar.') +
+      senhaCampo('Nova senha', 'nova', 'Mínimo de 8 caracteres. Evite datas e nomes.') + senhaCampo('Repita a nova senha', 'nova2') +
+      campo('E-mail de recuperação', '<input name="email" type="email" required placeholder="seuemail@gmail.com">', 'O código para recuperar a senha vai para este e-mail.') +
+      '<fieldset class="tecnico"><legend>Publicação (quem instalou o site preenche)</legend>' +
       campo('Token do GitHub', '<input name="token" type="password" autocomplete="off" required placeholder="github_pat_...">') +
-      '<details class="avancado"><summary>Repositório</summary><div class="linha">' +
-      campo('Usuário', '<input name="owner" value="' + esc(g.owner) + '">') + campo('Repositório', '<input name="repo" value="' + esc(g.repo) + '">') +
-      campo('Branch', '<input name="branch" value="' + esc(g.branch) + '">') + '</div></details>' +
-      '<label class="check"><input type="checkbox" name="lembrar" checked><span><b>Lembrar neste aparelho</b><small>Desmarque em aparelhos de outras pessoas.</small></span></label>' +
-      '<button class="btn btn-pri">Conectar</button></form>';
+      campo('Validade do token', '<input name="validade" type="date">', 'Opcional: o painel avisa antes de vencer.') +
+      '<div class="linha">' + campo('Usuário GitHub', '<input name="owner" value="' + PADRAO_GH.owner + '">') +
+      campo('Repositório', '<input name="repo" value="' + PADRAO_GH.repo + '">') + campo('Branch', '<input name="branch" value="' + PADRAO_GH.branch + '">') + '</div></fieldset>' +
+      '<button class="btn btn-pri">Criar acesso</button><button type="button" class="link" data-acao="voltar-login">Voltar</button></form>');
+  }
+  function telaEsqueci() {
+    if (!A) return telaLogin('O painel ainda não foi configurado: entre com usuário Admin e senha Admin.');
+    tela('<form class="login cartao" data-form="recuperar">' +
+      '<p class="desc">Procure no e-mail <b>' + esc(mascararEmail(A.email)) + '</b> a mensagem <b>"Código de recuperação – Painel Doçuras da Lorrany"</b> e digite o código abaixo.</p>' +
+      campo('Código de recuperação', '<input name="codigo" required autocomplete="one-time-code" autocapitalize="characters" placeholder="XXXX-XXXX-XXXX-XXXX">') +
+      senhaCampo('Nova senha', 'nova', 'Mínimo de 8 caracteres.') + senhaCampo('Repita a nova senha', 'nova2') +
+      '<button class="btn btn-pri">Criar nova senha</button><button type="button" class="link" data-acao="voltar-login">Voltar</button>' +
+      '<p class="desc pequeno">Não acha o e-mail? Procure também em Spam e Promoções. Se não encontrar, fale com quem instalou o site.</p></form>');
+  }
+  var depoisCodigo = null;
+  function telaCodigo(codigo, email, depois) {
+    depoisCodigo = depois;
+    var assunto = 'Código de recuperação – Painel Doçuras da Lorrany';
+    var corpo = 'Guarde este e-mail.\n\nSe você esquecer a senha do painel da loja, abra ' + location.href.split('?')[0] +
+      ', toque em "Esqueci minha senha" e digite o código:\n\n' + codigo + '\n\nCada código vale até você gerar um novo ou recuperar a senha.';
+    tela('<div class="login cartao"><h2>Seu código de recuperação</h2>' +
+      '<p class="desc">Envie este código para o seu e-mail agora. É com ele que você cria uma senha nova se esquecer a atual.</p>' +
+      '<div class="codigo">' + esc(codigo) + '</div>' +
+      '<a class="btn btn-pri" href="mailto:' + encodeURIComponent(email) + '?subject=' + encodeURIComponent(assunto) + '&body=' + encodeURIComponent(corpo) + '" data-enviado>Enviar para ' + esc(mascararEmail(email)) + '</a>' +
+      '<button type="button" class="btn" data-copiar="' + esc(codigo) + '">Copiar código</button>' +
+      '<p class="desc pequeno">O botão abre o seu aplicativo de e-mail com a mensagem pronta: é só tocar em enviar.</p>' +
+      '<button type="button" class="btn btn-ghost" data-acao="codigo-ok">Já enviei, continuar</button></div>');
   }
 
-  /* ---------- tela ---------- */
+  function senhaValida(f) {
+    if (f.nova.value.length < 8) { toast('A senha precisa ter pelo menos 8 caracteres.'); f.nova.focus(); return false; }
+    if (f.nova.value !== f.nova2.value) { toast('As duas senhas não são iguais.'); f.nova2.focus(); return false; }
+    if (f.nova.value.toLowerCase() === SENHA_PADRAO.toLowerCase()) { toast('Escolha uma senha diferente de "Admin".'); return false; }
+    return true;
+  }
+  function entrar(f) {
+    var usuario = f.usuario.value.trim(), senha = f.senha.value, lembrar = f.lembrar.checked;
+    if (!A) {
+      if (usuario.toLowerCase() === USUARIO_PADRAO.toLowerCase() && senha === SENHA_PADRAO) return telaPrimeiroAcesso();
+      return toast('Usuário ou senha incorretos.');
+    }
+    if (usuario.toLowerCase() !== String(A.usuario).toLowerCase()) return toast('Usuário ou senha incorretos.');
+    carregando(true, 'Entrando...');
+    var k;
+    desembrulhar(A.senha, senha).then(function (raw) { k = raw; return decifrarToken(k); }).then(function (token) {
+      carregando(false);
+      salvarSessao({ usuario: A.usuario, token: token, owner: A.repo.owner, repo: A.repo.repo, branch: A.repo.branch, k: b64(k) }, lembrar);
+      abrirEditor();
+    }).catch(function () { carregando(false); toast('Usuário ou senha incorretos.'); });
+  }
+  function primeiroAcesso(f) {
+    if (!senhaValida(f)) return;
+    var cred = { token: f.token.value.trim(), owner: f.owner.value.trim(), repo: f.repo.value.trim(), branch: f.branch.value.trim() || 'main' };
+    var k = aleatorio(32), codigo = novoCodigo(), novo;
+    carregando(true, 'Conferindo o token...');
+    validarToken(cred).then(function () {
+      carregando(true, 'Protegendo o acesso...');
+      return Promise.all([embrulhar(k, f.nova.value), embrulhar(k, normCodigo(codigo)), cifrarToken(k, cred.token)]);
+    }).then(function (r) {
+      novo = { versao: 1, usuario: f.usuario.value.trim() || USUARIO_PADRAO, email: f.email.value.trim(), iteracoes: ITERACOES,
+        senha: r[0], recuperacao: r[1], token: r[2], repo: { owner: cred.owner, repo: cred.repo, branch: cred.branch }, validadeToken: f.validade.value || null };
+      carregando(true, 'Salvando...');
+      return salvarAcesso(novo, cred, 'Configura acesso do painel');
+    }).then(function () {
+      carregando(false);
+      salvarSessao({ usuario: novo.usuario, token: cred.token, owner: cred.owner, repo: cred.repo, branch: cred.branch, k: b64(k) }, true);
+      telaCodigo(codigo, novo.email, abrirEditor);
+    }).catch(function (e) { carregando(false); toast(e.message, 5000); });
+  }
+  function recuperar(f) {
+    if (!senhaValida(f)) return;
+    var k, token, codigo = novoCodigo(), novo = clonar(A);
+    carregando(true, 'Conferindo o código...');
+    desembrulhar(A.recuperacao, normCodigo(f.codigo.value)).then(function (raw) { k = raw; return decifrarToken(k); }, function () {
+      throw new Error('Código de recuperação incorreto.');
+    }).then(function (t) {
+      token = t;
+      return Promise.all([embrulhar(k, f.nova.value), embrulhar(k, normCodigo(codigo))]);
+    }).then(function (r) {
+      novo.senha = r[0]; novo.recuperacao = r[1];
+      carregando(true, 'Salvando a nova senha...');
+      var cred = { token: token, owner: A.repo.owner, repo: A.repo.repo, branch: A.repo.branch };
+      return salvarAcesso(novo, cred, 'Recupera senha do painel').then(function () {
+        salvarSessao({ usuario: novo.usuario, token: token, owner: cred.owner, repo: cred.repo, branch: cred.branch, k: b64(k) }, true);
+      });
+    }).then(function () {
+      carregando(false); toast('Senha nova criada!');
+      telaCodigo(codigo, novo.email, abrirEditor);
+    }).catch(function (e) {
+      carregando(false);
+      toast(e.status === 401 ? 'A chave de publicação venceu. Fale com quem instalou o site.' : e.message, 5000);
+    });
+  }
+  function trocarSenha(f) {
+    if (!senhaValida(f)) return;
+    var novo = clonar(A), k = unb64(S.k);
+    carregando(true, 'Conferindo...');
+    desembrulhar(A.senha, f.atual.value).then(function () { return embrulhar(k, f.nova.value); }, function () {
+      throw new Error('A senha atual está incorreta.');
+    }).then(function (w) {
+      novo.senha = w;
+      return salvarAcesso(novo, null, 'Troca senha do painel');
+    }).then(function () { carregando(false); f.reset(); toast('Senha trocada! Use a nova senha no próximo acesso.', 4000); })
+      .catch(function (e) { carregando(false); toast(e.message, 5000); });
+  }
+  function salvarDadosAcesso(f) {
+    var novo = clonar(A);
+    novo.usuario = f.usuario.value.trim() || A.usuario; novo.email = f.email.value.trim();
+    carregando(true, 'Salvando...');
+    salvarAcesso(novo, null, 'Atualiza dados de acesso do painel').then(function () {
+      S.usuario = novo.usuario; salvarSessao(S, lembrado());
+      carregando(false); toast('Dados de acesso salvos.'); render();
+    }).catch(function (e) { carregando(false); toast(e.message, 5000); });
+  }
+  function gerarCodigo() {
+    if (!confirm('Gerar um código novo? O código antigo deixa de funcionar.')) return;
+    var novo = clonar(A), codigo = novoCodigo();
+    carregando(true, 'Gerando...');
+    embrulhar(unb64(S.k), normCodigo(codigo)).then(function (w) {
+      novo.recuperacao = w;
+      return salvarAcesso(novo, null, 'Gera novo código de recuperação');
+    }).then(function () {
+      carregando(false);
+      telaCodigo(codigo, novo.email, function () { aba = 'conta'; montar(); });
+    }).catch(function (e) { carregando(false); toast(e.message, 5000); });
+  }
+  function trocarToken(f) {
+    var cred = { token: f.token.value.trim(), owner: S.owner, repo: S.repo, branch: S.branch };
+    var novo = clonar(A);
+    carregando(true, 'Conferindo o token...');
+    validarToken(cred).then(function () { return cifrarToken(unb64(S.k), cred.token); }).then(function (c) {
+      novo.token = c; novo.validadeToken = f.validade.value || null;
+      return salvarAcesso(novo, cred, 'Troca token de publicação do painel');
+    }).then(function () {
+      S.token = cred.token; salvarSessao(S, lembrado());
+      carregando(false); toast('Token salvo!'); conferirValidade(); render();
+    }).catch(function (e) { carregando(false); toast(e.message, 5000); });
+  }
+
+  /* ---------- editor ---------- */
   function montar() {
-    app.innerHTML = '<header class="topo"><img src="' + esc(imgSrc(D.logo)) + '" alt=""><div><b>' + esc(D.nome) + '</b><small>Painel da loja</small></div>' +
+    app.innerHTML = '<header class="topo"><img src="' + esc(imgSrc(D.logo)) + '" alt=""><div><b>' + esc(D.nome) + '</b><small>Olá, ' + esc(S.usuario) + '</small></div>' +
       '<a class="btn btn-sm btn-ghost" href="../" target="_blank" rel="noopener">Ver site</a></header>' +
+      '<div class="alerta" hidden></div>' +
       '<nav class="abas">' + ABAS.map(function (a) { return '<button type="button" data-aba="' + a[0] + '">' + a[1] + '</button>'; }).join('') + '</nav>' +
       '<main class="painel"></main>' +
       '<div class="barra" hidden><span>Não publicado</span><button type="button" class="btn btn-sm btn-ghost" data-acao="previa">Pré-visualizar</button>' +
-      '<button type="button" class="btn btn-sm btn-pri" data-acao="ir-publicar">Publicar</button></div>' +
-      '<div class="toast" hidden></div><div class="carregador" hidden><div><i></i><p>Publicando...</p></div></div>';
-    render();
+      '<button type="button" class="btn btn-sm btn-pri" data-acao="ir-publicar">Publicar</button></div>';
+    render(); alerta();
   }
   function render() {
+    if (!$('.painel')) return;
     $$('.abas button').forEach(function (b) { b.classList.toggle('ativo', b.dataset.aba === aba); });
     $('.painel').innerHTML = RENDER[aba]();
     barra();
@@ -349,6 +685,11 @@
       D.horarios[i] = el.checked ? { abre: '08:00', fecha: '18:00' } : null;
       salvarRascunho(); return render();
     }
+    if (el.dataset.diaSem) {
+      var d = +el.dataset.diaSem, sem = (D.pedidos.diasSemEncomenda || []).filter(function (x) { return x !== d; });
+      if (el.checked) sem.push(d);
+      D.pedidos.diasSemEncomenda = sem.sort(); salvarRascunho(); return;
+    }
     if (el.dataset.tipo) { mudarTipo(el.dataset.tipo, el.value); salvarRascunho(); return render(); }
     if (el.dataset.k && (el.type === 'checkbox' || el.tagName === 'SELECT' || el.type === 'color' || el.dataset.t === 'numeros')) {
       definir(D, el.dataset.k, converter(el)); salvarRascunho();
@@ -360,9 +701,19 @@
   }, true);
   app.addEventListener('submit', function (e) {
     e.preventDefault();
-    if (e.target.dataset.form === 'login') conectar(e.target);
+    var f = e.target, tipo = f.dataset.form;
+    if (tipo === 'login') entrar(f);
+    else if (tipo === 'primeiro') primeiroAcesso(f);
+    else if (tipo === 'recuperar') recuperar(f);
+    else if (tipo === 'trocar-senha') trocarSenha(f);
+    else if (tipo === 'dados-acesso') salvarDadosAcesso(f);
+    else if (tipo === 'trocar-token') trocarToken(f);
   });
   app.addEventListener('click', function (e) {
+    var ver = e.target.closest('[data-ver-senha]');
+    if (ver) { var inp0 = ver.previousElementSibling; inp0.type = inp0.type === 'password' ? 'text' : 'password'; return; }
+    var cp = e.target.closest('[data-copiar]');
+    if (cp) { if (navigator.clipboard) navigator.clipboard.writeText(cp.dataset.copiar).then(function () { toast('Código copiado.'); }); return; }
     var ab = e.target.closest('[data-aba]');
     if (ab) { aba = ab.dataset.aba; render(); window.scrollTo(0, 0); return; }
     var b = e.target.closest('[data-acao]'); if (!b) return;
@@ -388,7 +739,14 @@
     else if (a === 'add-conta') { D.pagamento.contas.push({ banco: '', agencia: '', conta: '', tipo: 'Conta corrente', titular: '', documento: '' }); salvarRascunho(); render(); }
     else if (a === 'add-massa') { D.bolosKg.massas.push({ nome: '', acrescimo: 0, porKg: false }); salvarRascunho(); render(); }
     else if (a === 'add-galeria') { (D.galeria = D.galeria || []).push(''); render(); }
-    else if (a === 'preco-cat') {
+    else if (a === 'add-depoimento') { (D.depoimentos = D.depoimentos || []).push({ nome: '', texto: '', foto: '' }); salvarRascunho(); render(); }
+    else if (a === 'add-data') {
+      var nd = $('[data-nova-data]').value;
+      if (!nd) return toast('Escolha a data no calendário.');
+      var datas = D.pedidos.datasBloqueadas = D.pedidos.datasBloqueadas || [];
+      if (datas.indexOf(nd) < 0) datas.push(nd);
+      datas.sort(); salvarRascunho(); render(); toast(dataBR(nd) + ' bloqueada. Publique para valer no site.');
+    } else if (a === 'preco-cat') {
       var inp = $('[data-preco-cat="' + b.dataset.ci + '"]'), v = +String(inp.value).replace(',', '.');
       if (!(v > 0)) return toast('Digite o novo preço por kg.');
       var n = 0; D.categorias[+b.dataset.ci].itens.forEach(function (x) { if (x.precoKg > 0) { x.precoKg = v; n++; } });
@@ -402,12 +760,16 @@
     else if (a === 'descartar') {
       if (!confirm('Descartar tudo que ainda não foi publicado?')) return;
       try { localStorage.removeItem(RASCUNHO); } catch (er) { /* ok */ }
-      iniciar();
-    } else if (a === 'sair') { salvarGH(null); render(); }
+      D = JSON.parse(publicado); alterado = false; render();
+    } else if (a === 'sair') { salvarSessao(null); telaLogin(); }
     else if (a === 'qr-mesas') imprimirMesas();
+    else if (a === 'esqueci') telaEsqueci();
+    else if (a === 'voltar-login') telaLogin();
+    else if (a === 'codigo-ok') { if (depoisCodigo) depoisCodigo(); }
+    else if (a === 'novo-codigo') gerarCodigo();
+    else if (a === 'instalar' && instalar) { instalar.prompt(); instalar = null; }
   });
   var CORES_PADRAO = { primaria: '#d6457a', textoPrimaria: '#ffffff', secundaria: '#f7c6d6', fundo: '#fff7f9', superficie: '#ffffff', texto: '#4a2318', suave: '#8a6a62' };
-  var publicado = null;
   function alteradoReal() { return JSON.stringify(D) !== publicado; }
 
   function mudarTipo(k, tipo) {
@@ -426,9 +788,9 @@
     leitor.onload = function () {
       var im = new Image();
       im.onload = function () {
-        var esc2 = Math.min(1, max / Math.max(im.width, im.height));
+        var fator = Math.min(1, max / Math.max(im.width, im.height));
         var c = document.createElement('canvas');
-        c.width = Math.round(im.width * esc2); c.height = Math.round(im.height * esc2);
+        c.width = Math.round(im.width * fator); c.height = Math.round(im.height * fator);
         var ctx = c.getContext('2d');
         if (!png) { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c.width, c.height); }
         ctx.drawImage(im, 0, 0, c.width, c.height);
@@ -441,35 +803,19 @@
     leitor.readAsDataURL(f);
   }
 
-  /* ---------- GitHub ---------- */
-  function api(caminho, opts) {
-    opts = opts || {};
-    return fetch('https://api.github.com/repos/' + gh.owner + '/' + gh.repo + caminho, {
-      method: opts.method || 'GET',
-      headers: { Authorization: 'Bearer ' + gh.token, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
-      body: opts.body ? JSON.stringify(opts.body) : undefined
-    }).then(function (r) {
-      return r.json().catch(function () { return {}; }).then(function (j) {
-        if (!r.ok) { var e = new Error(j.message || 'Erro ' + r.status); e.status = r.status; throw e; }
-        return j;
-      });
+  /* ---------- publicar ---------- */
+  function limparDados(dados) {
+    var hoje = hojeISO();
+    dados.pedidos.datasBloqueadas = (dados.pedidos.datasBloqueadas || []).filter(function (d) { return d >= hoje; });
+    dados.galeria = (dados.galeria || []).filter(Boolean);
+    dados.depoimentos = (dados.depoimentos || []).filter(function (d) { return d.texto; });
+    dados.categorias.forEach(function (c) {
+      c.itens.forEach(function (it) { if (it.sabores && !(it.sabores.lista || []).length) delete it.sabores; });
     });
-  }
-  function conectar(form) {
-    var v = { token: form.token.value.trim(), owner: form.owner.value.trim(), repo: form.repo.value.trim(), branch: form.branch.value.trim() || 'main' };
-    var lembrar = form.lembrar.checked, antigo = gh;
-    gh = v;
-    api('').then(function (r) {
-      if (!r.permissions || !r.permissions.push) throw new Error('Este token não tem permissão de escrita no repositório.');
-      salvarGH(v, lembrar); toast('Conectado!'); render();
-    }).catch(function (e) {
-      gh = antigo;
-      toast(e.status === 401 ? 'Token inválido ou expirado.' : e.status === 404 ? 'Repositório não encontrado para este token.' : e.message, 4000);
-    });
+    return dados;
   }
   function publicar() {
-    if (!gh || !gh.token) return toast('Conecte o GitHub primeiro.');
-    var dados = clonar(D), arquivos = [], n = 0, carimbo = Date.now().toString(36);
+    var dados = limparDados(clonar(D)), arquivos = [], n = 0, carimbo = Date.now().toString(36);
     // fotos novas (data:) viram arquivos em img/produtos/
     (function trocar(o, nome) {
       Object.keys(o).forEach(function (k) {
@@ -484,28 +830,16 @@
     })(dados, '');
     arquivos.push({ path: 'dados.json', texto: JSON.stringify(dados, null, 2) + '\n' });
 
-    var load = $('.carregador'); load.hidden = false;
-    var ref = '/git/refs/heads/' + gh.branch, base;
-    api('/git/ref/heads/' + gh.branch).then(function (r) {
-      base = r.object.sha;
-      return api('/git/commits/' + base);
-    }).then(function (commit) {
-      return Promise.all(arquivos.map(function (a) {
-        return api('/git/blobs', { method: 'POST', body: a.base64 ? { content: a.base64, encoding: 'base64' } : { content: a.texto, encoding: 'utf-8' } })
-          .then(function (b) { return { path: a.path, mode: '100644', type: 'blob', sha: b.sha }; });
-      })).then(function (tree) { return api('/git/trees', { method: 'POST', body: { base_tree: commit.tree.sha, tree: tree } }); });
-    }).then(function (tree) {
-      return api('/git/commits', { method: 'POST', body: { message: 'Atualiza catálogo pelo painel (' + new Date().toLocaleString('pt-BR') + ')', tree: tree.sha, parents: [base] } });
-    }).then(function (c) {
-      return api(ref, { method: 'PATCH', body: { sha: c.sha } });
-    }).then(function () {
+    carregando(true, 'Publicando...');
+    commitar(arquivos, 'Atualiza catálogo pelo painel (' + new Date().toLocaleString('pt-BR') + ')').then(function () {
       D = dados; publicado = JSON.stringify(D); alterado = false;
       try { localStorage.removeItem(RASCUNHO); } catch (e) { /* ok */ }
-      load.hidden = true; render();
+      carregando(false); render();
       toast('Publicado! O site atualiza em 1 a 2 minutos.', 5000);
     }).catch(function (e) {
-      load.hidden = true;
-      toast('Não foi possível publicar: ' + (e.status === 401 ? 'token inválido ou expirado.' : e.message), 6000);
+      carregando(false);
+      toast('Não foi possível publicar: ' + (e.status === 401 ? 'a chave de publicação venceu ou foi revogada.' : e.message), 6000);
+      if (e.status === 401) { validade = { dias: -1 }; alerta(); }
     });
   }
 
@@ -513,7 +847,7 @@
   function exportar() {
     var a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(D, null, 2)], { type: 'application/json' }));
-    a.download = 'backup-docuras-da-lorrany-' + new Date().toISOString().slice(0, 10) + '.json';
+    a.download = 'backup-docuras-da-lorrany-' + hojeISO() + '.json';
     a.click();
   }
   function importar(el) {
@@ -544,12 +878,15 @@
     j.promo = j.promo || { ativo: false };
     j.contato = j.contato || {}; j.redes = j.redes || {}; j.endereco = j.endereco || {};
     j.pedidos = j.pedidos || {}; j.entrega = j.entrega || {};
+    j.pedidos.datasBloqueadas = j.pedidos.datasBloqueadas || []; j.pedidos.diasSemEncomenda = j.pedidos.diasSemEncomenda || [];
     j.pagamento = j.pagamento || {}; j.pagamento.pix = j.pagamento.pix || {}; j.pagamento.contas = j.pagamento.contas || [];
     j.bolosKg = j.bolosKg || { pesos: [1, 2, 3], massas: [] }; j.bolosKg.massas = j.bolosKg.massas || [];
+    j.bolosKg.topo = j.bolosKg.topo || { ativo: false, preco: 0 };
+    j.depoimentos = j.depoimentos || [];
     j.categorias.forEach(function (c) { c.itens = c.itens || []; });
     return j;
   }
-  function iniciar() {
+  function abrirEditor() {
     fetch('../dados.json?v=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (pub) {
       publicado = JSON.stringify(normalizar(pub));
       var rasc = null;
@@ -558,10 +895,23 @@
       alterado = alteradoReal();
       montar();
       if (alterado) toast('Rascunho recuperado: há alterações não publicadas.', 4000);
-      if (!gh) { aba = 'publicar'; render(); }
+      conferirValidade();
     }).catch(function () {
       app.innerHTML = '<p class="carregando">Não foi possível carregar os dados da loja. Verifique a internet e atualize a página.</p>';
     });
   }
+  function iniciar() {
+    carregarAcesso().then(function (acesso) {
+      A = acesso;
+      // sessão de outro acesso (senha trocada em outro aparelho continua valendo aqui até sair)
+      if (S && A && S.k && S.token) abrirEditor();
+      else { salvarSessao(null); telaLogin(); }
+    }).catch(function () {
+      app.innerHTML = '<p class="carregando">Não foi possível abrir o painel. Verifique a internet e atualize a página.</p>';
+    });
+  }
+
+  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); instalar = e; if (aba === 'conta') render(); });
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () { /* opcional */ });
   iniciar();
 })();

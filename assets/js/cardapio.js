@@ -143,6 +143,8 @@
 
     var PESOS = (kg.pesos && kg.pesos.length ? kg.pesos : [1, 1.5, 2, 2.5, 3]).slice().sort(function (a, b) { return a - b; });
     var MASSAS = kg.massas && kg.massas.length ? kg.massas : [{ nome: 'Massa branca', acrescimo: 0 }];
+    var COBERTURAS = (kg.coberturas || []).filter(Boolean);
+    var TOPO = kg.topo && kg.topo.ativo;
     function acrescimoMassa(m, peso) { return (m && m.acrescimo || 0) * (m && m.porKg ? peso : 1); }
     function ehKg(it) { return it.precoKg > 0; }
     function precoBase(it) {
@@ -182,7 +184,8 @@
         '<button class="add" data-add="' + it.id + '" aria-label="Adicionar ' + esc(it.nome) + '">' + ICON.plus + '<span>' + (ehKg(it) ? 'Montar' : 'Adicionar') + '</span></button>';
       return '<article class="item' + (it.esgotado ? ' esgotado' : '') + '" data-item="' + it.id + '" data-busca="' + busca + '">' +
         '<div class="item-img' + (it.img ? '' : ' noimg') + '">' + imgTag(it.img, 600, it.nome) + tagsHtml(it) + '</div>' +
-        '<div class="item-body"><h4>' + esc(it.nome) + '</h4>' + (it.desc ? '<p class="desc">' + esc(it.desc) + '</p>' : '') + opcoesHtml(it) +
+        '<div class="item-body"><h4>' + esc(it.nome) + '</h4>' + (it.desc ? '<p class="desc">' + esc(it.desc) + '</p>' : '') +
+        (it.rendimento ? '<p class="rend">' + esc(it.rendimento) + '</p>' : '') + opcoesHtml(it) +
         '<div class="item-foot">' + precoHtml(it) + addBtn + '</div></div></article>';
     }
 
@@ -241,6 +244,15 @@
       return '<section id="sobre" class="sobre"><div class="sobre-txt"><h2>Sobre nós</h2><p>' + esc(C.sobre) + '</p>' +
         (C.diferenciais && C.diferenciais.length ? '<ul class="diferenciais">' + C.diferenciais.map(function (d) { return '<li>' + ICON.check + esc(d) + '</li>'; }).join('') + '</ul>' : '') +
         '</div>' + (gal ? '<div class="galeria">' + gal + '</div>' : '') + '</section>';
+    }
+    function depoimentosHtml() {
+      var L = (C.depoimentos || []).filter(function (d) { return d && d.texto; });
+      if (!L.length) return '';
+      return '<section id="depoimentos" class="depoimentos"><h2>O que dizem nossos clientes</h2><div class="depo-lista">' + L.map(function (d) {
+        return '<figure class="depo"><blockquote>' + esc(d.texto) + '</blockquote><figcaption>' +
+          (d.foto ? '<img src="' + esc(img(d.foto, 120)) + '" alt="" loading="lazy">' : '<span class="depo-ini">' + esc((d.nome || '?').charAt(0)) + '</span>') +
+          '<b>' + esc(d.nome || 'Cliente') + '</b></figcaption></figure>';
+      }).join('') + '</div></section>';
     }
     function formasPagamento() {
       var f = [];
@@ -350,7 +362,7 @@
 
     /* ---------- montagem ---------- */
     var app = document.getElementById('app');
-    app.innerHTML = previaHtml() + mesaHtml() + heroHtml() + '<main>' + promoHtml() + menuHtml() + sobreHtml() + infoHtml() + localHtml() + contatoHtml() + '</main>' +
+    app.innerHTML = previaHtml() + mesaHtml() + heroHtml() + '<main>' + promoHtml() + menuHtml() + sobreHtml() + depoimentosHtml() + infoHtml() + localHtml() + contatoHtml() + '</main>' +
       rodapeHtml() +
       '<a class="fab-wa" href="' + wa(contato.whatsapp, 'Olá, ' + C.nome + '!') + '" target="_blank" rel="noopener" aria-label="WhatsApp">' + ICON.whatsapp + '</a>' +
       '<button class="cart-bar" data-acao="carrinho" hidden><span class="cart-count">0</span><span>Ver pedido</span><b class="cart-total"></b></button>' +
@@ -413,10 +425,12 @@
       var modoKg = ehKg(it);
       var temOp = !modoKg && it.opcoes && it.opcoes.length;
       var fatias = kg.fatiasPorKg || 0;
+      var sabores = it.sabores && it.sabores.lista || [], maxSab = Math.max(1, +(it.sabores && it.sabores.max) || 1);
       modal.innerHTML =
         '<button class="close" data-acao="fechar" aria-label="Fechar">' + ICON.x + '</button>' +
         (it.img ? '<div class="modal-img">' + imgTag(it.img, 900, it.nome) + '</div>' : '') +
         '<div class="modal-body">' + tagsHtml(it) + '<h3>' + esc(it.nome) + '</h3>' + (it.desc ? '<p class="desc">' + esc(it.desc) + '</p>' : '') +
+        (it.rendimento ? '<p class="rend">' + esc(it.rendimento) + '</p>' : '') +
         (modoKg ? '<p class="preco-kg">' + brl(it.precoKg) + ' <small>o kg</small></p>' +
           (MASSAS.length ? '<fieldset><legend>Escolha a massa <em>obrigatório</em></legend>' + MASSAS.map(function (m, i) {
             return '<label class="opt"><input type="radio" name="massa" value="' + i + '"' + (i === 0 ? ' checked' : '') + '><span>' + esc(m.nome) + '</span><b>' +
@@ -425,9 +439,18 @@
           '<fieldset><legend>Peso do bolo <em>obrigatório</em></legend><div class="pesos">' + PESOS.map(function (p, i) {
             return '<label class="peso"><input type="radio" name="peso" value="' + i + '"' + (i === 0 ? ' checked' : '') + '><span><b>' + kgTxt(p) + '</b>' +
               (fatias ? '<small>~' + Math.round(p * fatias) + ' fatias</small>' : '') + '<small>' + brl(it.precoKg * p) + '</small></span></label>';
-          }).join('') + '</div></fieldset>' : '') +
+          }).join('') + '</div></fieldset>' +
+          (COBERTURAS.length ? '<fieldset><legend>Cobertura <em>obrigatório</em></legend>' + COBERTURAS.map(function (c, i) {
+            return '<label class="opt"><input type="radio" name="cobertura" value="' + i + '"' + (i === 0 ? ' checked' : '') + '><span>' + esc(c) + '</span></label>';
+          }).join('') + '</fieldset>' : '') +
+          (TOPO ? '<fieldset><legend>Extras <em>opcional</em></legend><label class="opt"><input type="checkbox" name="topo"><span>Topo de bolo personalizado</span><b>' +
+            (kg.topo.preco ? '+ ' + brl(kg.topo.preco) : '') + '</b></label></fieldset>' : '') +
+          (kg.pedirNome ? '<label class="obs"><span>Nome e idade para escrever no bolo <em class="opc">opcional</em></span><input name="escrita" maxlength="60" placeholder="Ex.: Ana · 5 anos"></label>' : '') : '') +
         (temOp ? '<fieldset><legend>' + esc(it.opcoesTitulo || 'Escolha uma opção') + ' <em>obrigatório</em></legend>' + it.opcoes.map(function (o, i) {
           return '<label class="opt"><input type="radio" name="op" value="' + i + '"' + (i === 0 ? ' checked' : '') + '><span>' + esc(o.nome) + '</span><b>' + brl(o.preco) + '</b></label>';
+        }).join('') + '</fieldset>' : '') +
+        (sabores.length ? '<fieldset class="sabores"><legend>' + (maxSab > 1 ? 'Escolha até ' + maxSab + ' sabores' : 'Escolha o sabor') + ' <em>obrigatório</em></legend>' + sabores.map(function (sb, i) {
+          return '<label class="opt"><input type="checkbox" name="sabor" value="' + i + '"><span>' + esc(sb) + '</span></label>';
         }).join('') + '</fieldset>' : '') +
         (it.adicionais && it.adicionais.length ? '<fieldset><legend>Adicionais <em>opcional</em></legend>' + it.adicionais.map(function (a, i) {
           return '<label class="opt"><input type="checkbox" name="ad" value="' + i + '"><span>' + esc(a.nome) + '</span><b>+ ' + brl(a.preco) + '</b></label>';
@@ -440,12 +463,20 @@
       function calc() {
         var ads = $$('input[name=ad]:checked', modal).map(function (c) { return it.adicionais[+c.value]; });
         var extra = ads.reduce(function (s, a) { return s + a.preco; }, 0);
-        var unit, detalhe;
+        var unit, detalhe, extras = [];
+        var marcados = $$('input[name=sabor]:checked', modal);
+        $$('input[name=sabor]', modal).forEach(function (c) { c.disabled = !c.checked && marcados.length >= maxSab; });
+        if (marcados.length) extras.push('Sabores: ' + marcados.map(function (c) { return sabores[+c.value]; }).join(', '));
         if (modoKg) {
           var peso = PESOS[+$('input[name=peso]:checked', modal).value];
           var mi = $('input[name=massa]:checked', modal), massa = mi ? MASSAS[+mi.value] : null;
           unit = it.precoKg * peso + acrescimoMassa(massa, peso);
           detalhe = kgTxt(peso) + (massa ? ' · ' + massa.nome : '');
+          var cob = $('input[name=cobertura]:checked', modal);
+          if (cob) extras.push('Cobertura: ' + COBERTURAS[+cob.value]);
+          if ($('input[name=topo]:checked', modal)) { extras.push('Topo de bolo personalizado'); extra += +kg.topo.preco || 0; }
+          var escrita = $('input[name=escrita]', modal);
+          if (escrita && escrita.value.trim()) extras.push('Escrever: ' + escrita.value.trim());
         } else {
           var op = temOp ? it.opcoes[+$('input[name=op]:checked', modal).value] : null;
           unit = op ? op.preco : it.preco;
@@ -453,14 +484,16 @@
         }
         unit += extra;
         $('.btn-add b', modal).textContent = brl(unit * qtd);
-        return { unit: unit, detalhe: detalhe, ads: ads.map(function (a) { return a.nome; }) };
+        return { unit: unit, detalhe: detalhe, ads: extras.concat(ads.map(function (a) { return a.nome; })), sabores: marcados.length };
       }
       modal.oninput = calc;
       modal.onclick = function (e) {
         var q = e.target.closest('[data-q]');
         if (q) { qtd = Math.max(1, qtd + +q.dataset.q); $('.qty span', modal).textContent = qtd; calc(); }
         if (e.target.closest('.btn-add')) {
-          var r = calc(); adicionar(it, r.detalhe, r.unit, r.ads, $('textarea', modal).value.trim(), qtd); fechar();
+          var r = calc();
+          if (sabores.length && !r.sabores) { toast('Escolha ' + (maxSab > 1 ? 'pelo menos um sabor' : 'o sabor')); return; }
+          adicionar(it, r.detalhe, r.unit, r.ads, $('textarea', modal).value.trim(), qtd); fechar();
         }
       };
       calc(); abrir(modal);
@@ -528,10 +561,25 @@
       var d = new Date(); d.setDate(d.getDate() + (+pedidos.antecedenciaDias || 0));
       return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     }
+    var SEM = pedidos.diasSemEncomenda || [];
+    var PLURAL = ['aos domingos', 'às segundas-feiras', 'às terças-feiras', 'às quartas-feiras', 'às quintas-feiras', 'às sextas-feiras', 'aos sábados'];
+    function bloqueadas() { var m = dataMinima(); return (pedidos.datasBloqueadas || []).filter(function (d) { return d >= m; }); }
+    function dataIndisponivel(iso) {
+      if (!iso) return '';
+      if (iso < dataMinima()) return 'Escolha uma data a partir de ' + dataBR(dataMinima()) + '.';
+      if (bloqueadas().indexOf(iso) > -1) return 'A agenda de ' + dataBR(iso) + ' já está completa. Escolha outra data.';
+      var p = iso.split('-'), dia = new Date(+p[0], +p[1] - 1, +p[2]).getDay();
+      if (SEM.indexOf(dia) > -1) return 'Não fazemos encomendas ' + PLURAL[dia] + '. Escolha outra data.';
+      return '';
+    }
     function encomendaHtml() {
       if (!pedidos.encomenda || form.tipo === 'mesa') return '';
       var quando = form.tipo === 'entrega' ? 'entrega' : 'retirada';
+      var B = bloqueadas();
+      var agenda = (SEM.length ? 'Não fazemos encomendas ' + SEM.map(function (d) { return PLURAL[d]; }).join(', ') + '. ' : '') +
+        (B.length ? 'Datas sem vaga: ' + B.slice(0, 8).map(dataBR).join(', ') + '.' : '');
       return (pedidos.avisoEncomenda ? '<p class="aviso">' + esc(pedidos.avisoEncomenda) + '</p>' : '') +
+        (agenda ? '<p class="aviso">' + esc(agenda) + '</p>' : '') +
         '<div class="linha-2"><label><span>Data da ' + quando + '</span><input type="date" name="data" required min="' + dataMinima() + '" value="' + esc(form.data) + '"></label>' +
         '<label><span>Horário</span><input type="time" name="hora" required value="' + esc(form.hora) + '"></label></div>';
     }
@@ -544,6 +592,11 @@
       store.set(KEY + ':cliente', { nome: form.nome, endereco: form.endereco, referencia: form.referencia, pagamento: form.pagamento, tipo: form.tipo });
     }
     drawer.addEventListener('change', function (e) {
+      if (e.target.name === 'data') {
+        var msg = dataIndisponivel(e.target.value);
+        if (msg) { toast(msg); e.target.value = ''; e.target.classList.add('erro'); form.data = ''; return; }
+        e.target.classList.remove('erro');
+      }
       if (e.target.name === 'tipo' || e.target.name === 'pagamento') {
         lerForm(); renderCarrinho();
         var alvo = $('[name="' + e.target.name + '"]' + (e.target.type === 'radio' ? ':checked' : ''), drawer); if (alvo) alvo.focus();
@@ -563,6 +616,8 @@
     function enviar() {
       var faltando = $$('[required]', drawer).filter(function (el) { return !el.value.trim(); });
       if (faltando.length) { faltando[0].focus(); faltando[0].classList.add('erro'); toast('Preencha os campos obrigatórios'); return; }
+      var campoData = $('[name=data]', drawer), msgData = campoData && dataIndisponivel(campoData.value);
+      if (msgData) { campoData.focus(); campoData.classList.add('erro'); toast(msgData); return; }
       var L = [];
       L.push('*Novo pedido — ' + C.nome + '*', '');
       carrinho.forEach(function (l) {
@@ -649,7 +704,7 @@
       var add = e.target.closest('[data-add]');
       if (add) {
         var it = ITENS[add.dataset.add];
-        if (ehKg(it) || (it.opcoes && it.opcoes.length > 1) || (it.adicionais && it.adicionais.length)) abrirItem(it);
+        if (ehKg(it) || (it.opcoes && it.opcoes.length > 1) || (it.adicionais && it.adicionais.length) || (it.sabores && it.sabores.lista && it.sabores.lista.length)) abrirItem(it);
         else adicionar(it, it.unidade ? '1 ' + it.unidade : '', it.opcoes && it.opcoes[0] ? it.opcoes[0].preco : it.preco, [], '', 1);
         return;
       }

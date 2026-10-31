@@ -87,6 +87,7 @@
       share: svg('<circle cx="18" cy="5" r="3" ' + S + '/><circle cx="6" cy="12" r="3" ' + S + '/><circle cx="18" cy="19" r="3" ' + S + '/><path ' + S + ' d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/>'),
       qr: svg('<path ' + S + ' d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM20 14v.01M14 20h.01M17 17h4v4h-4"/>'),
       cart: svg('<path ' + S + ' d="M6 6h15l-1.5 9h-12zM6 6 5 2H2"/><circle cx="9" cy="20" r="1.5" fill="currentColor"/><circle cx="18" cy="20" r="1.5" fill="currentColor"/>'),
+      menu: svg('<path ' + S + ' d="M4 6h16M4 12h16M4 18h16"/>'),
       search: svg('<circle cx="11" cy="11" r="7" ' + S + '/><path ' + S + ' d="m20 20-4-4"/>'),
       x: svg('<path ' + S + ' d="M6 6l12 12M18 6 6 18"/>'),
       plus: svg('<path ' + S + ' d="M12 5v14M5 12h14"/>'),
@@ -224,13 +225,22 @@
       return '<section class="promo"><span class="promo-badge">' + esc(p.selo || 'Destaque') + '</span><div><h3>' + esc(p.titulo) +
         '</h3>' + (p.texto ? '<p>' + esc(p.texto) + '</p>' : '') + '</div></section>';
     }
+    // "Bolos confeitados · R$ 80/kg" vira título "Bolos confeitados" e detalhe "R$ 80/kg"
+    function partesCat(nome) { var p = String(nome).split(/\s+·\s+/); return { titulo: p[0], detalhe: p.slice(1).join(' · ') }; }
+    function catCards(fechar) {
+      return CATS.map(function (c, i) {
+        var p = partesCat(c.nome), n = c.itens.length;
+        return '<a class="cat-card" href="#cat-' + i + '"' + (fechar ? ' data-acao="fechar"' : '') + '>' +
+          '<span class="cc-ic">' + (c.icone || '•') + '</span><span class="cc-txt"><b>' + esc(p.titulo) + '</b>' +
+          '<small>' + (p.detalhe ? esc(p.detalhe) + ' · ' : '') + n + (n === 1 ? ' opção' : ' opções') + '</small></span></a>';
+      }).join('');
+    }
     function menuHtml() {
       return '<section id="cardapio" class="menu">' +
         '<div class="menu-head"><h2>Nosso catálogo</h2><label class="search">' + ICON.search +
         '<input type="search" placeholder="Buscar bolo, recheio, docinho..." aria-label="Buscar no catálogo"></label></div>' +
-        '<nav class="cat-nav" aria-label="Categorias">' + CATS.map(function (c, i) {
-          return '<a href="#cat-' + i + '">' + (c.icone ? c.icone + ' ' : '') + esc(c.nome) + '</a>';
-        }).join('') + '</nav>' +
+        '<nav class="cat-grid" aria-label="Categorias">' + catCards() + '</nav>' +
+        '<div class="cat-bar" hidden><span class="cat-atual"></span><button type="button" class="btn btn-pri btn-sm" data-acao="cats">' + ICON.menu + 'Categorias</button></div>' +
         CATS.map(function (c, i) {
           return '<div class="cat" id="cat-' + i + '"><h3>' + (c.icone ? '<span class="cat-ic">' + c.icone + '</span>' : '') + esc(c.nome) + '</h3>' +
             (c.desc ? '<p class="cat-desc">' + esc(c.desc) + '</p>' : '') +
@@ -718,6 +728,7 @@
       else if (acao === 'qr') abrirQR();
       else if (acao === 'baixar-qr') baixarQR();
       else if (acao === 'share') compartilhar();
+      else if (acao === 'cats') abrirCats();
     });
     overlay.addEventListener('click', fechar);
     document.addEventListener('keydown', function (e) {
@@ -739,19 +750,30 @@
     });
 
     /* ---------- categoria ativa ---------- */
-    var links = $$('.cat-nav a');
+    var links = $$('.cat-grid a'), catBar = $('.cat-bar'), grade = $('.cat-grid'), menu = $('#cardapio');
     if ('IntersectionObserver' in window) {
       var io = new IntersectionObserver(function (ents) {
         ents.forEach(function (en) {
           if (!en.isIntersecting) return;
-          links.forEach(function (a) {
-            var on = a.getAttribute('href') === '#' + en.target.id;
-            a.classList.toggle('ativo', on);
-            if (on) a.parentNode.scrollTo({ left: a.offsetLeft - 16, behavior: 'smooth' });
-          });
+          links.forEach(function (a) { a.classList.toggle('ativo', a.getAttribute('href') === '#' + en.target.id); });
+          var c = CATS[+en.target.id.replace('cat-', '')];
+          if (c) $('.cat-atual', catBar).textContent = (c.icone ? c.icone + ' ' : '') + c.nome;
         });
       }, { rootMargin: '-45% 0px -50% 0px' });
       $$('.cat').forEach(function (c) { io.observe(c); });
+    }
+    // a barra fixa aparece quando a grade de categorias sai da tela e some depois do catálogo
+    var barraPendente = false;
+    function posicaoBarra() {
+      barraPendente = false;
+      var mostrar = grade.getBoundingClientRect().bottom < 0 && menu.getBoundingClientRect().bottom > 120;
+      catBar.hidden = !mostrar;
+    }
+    window.addEventListener('scroll', function () { if (!barraPendente) { barraPendente = true; requestAnimationFrame(posicaoBarra); } }, { passive: true });
+    function abrirCats() {
+      modal.innerHTML = '<button class="close" data-acao="fechar" aria-label="Fechar">' + ICON.x + '</button>' +
+        '<div class="modal-body"><h3>Categorias</h3><nav class="cat-grid cat-grid-modal">' + catCards(true) + '</nav></div>';
+      abrir(modal);
     }
 
     atualizarBarra();

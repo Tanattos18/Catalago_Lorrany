@@ -110,3 +110,33 @@ main > section > h2, .menu-head h2 { font-family: var(--font-title); }
 .depo figcaption { display: flex; align-items: center; gap: 10px; }
 .depo figcaption img, .depo-ini { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
 .depo-ini { display: grid; place-items: center; background: var(--sec); color: var(--pri); font-weight: 800; }
+
+/* categorias: grade com tudo à vista (sem rolar para o lado) */
+.cat-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); margin: 22px 0 8px; }
+.cat-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line);
+  text-decoration: none; transition: transform .15s, border-color .15s, box-shadow .15s; }
+.cat-card:hover { transform: translateY(-2px); border-color: var(--pri); box-shadow: var(--shadow); }
+.cat-card.ativo { border-color: var(--pri); background: #fde3ec; }
+.cc-ic { width: 42px; height: 42px; flex: none; display: grid; place-items: center; border-radius: 12px; background: #fde3ec; font-size: 1.35rem; }
+.cat-card.ativo .cc-ic { background: #fff; }
+.cc-txt { display: grid; min-width: 0; line-height: 1.25; }
+.cc-txt b { font-size: .95rem; }
+.cc-txt small { color: var(--muted); font-size: .8rem; }
+@media (max-width: 560px) {
+  .cat-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .cat-card { flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px; }
+  .cc-ic { width: 36px; height: 36px; font-size: 1.15rem; }
+  .cc-txt b { font-size: .9rem; }
+}
+.cat-grid-modal { grid-template-columns: 1fr 1fr; margin-top: 14px; }
+
+/* barra fixa com a categoria atual */
+.cat-bar { position: fixed; z-index: 35; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 10px; padding: 8px 16px;
+  background: rgba(255, 247, 249, .96); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); box-shadow: 0 4px 14px rgba(214, 69, 122, .1); animation: desce .2s ease; }
+.cat-atual { flex: 1; min-width: 0; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cat-bar .btn { flex: none; }
+@keyframes desce { from { transform: translateY(-100%); } }
+
+/* busca sem borda dupla */
+.search input { border: 0 !important; background: none !important; padding: 2px 0 !important; outline: none !important; }
+.search:focus-within { outline: 2px solid var(--pri); outline-offset: 1px; }

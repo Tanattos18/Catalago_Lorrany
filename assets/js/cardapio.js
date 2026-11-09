@@ -582,16 +582,73 @@
       if (SEM.indexOf(dia) > -1) return 'Não fazemos encomendas ' + PLURAL[dia] + '. Escolha outra data.';
       return '';
     }
+    /* ---------- calendário de encomendas (o cliente toca na data, não digita) ---------- */
+    var MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+    var DIAS_CURTOS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    var LIMITE_DIAS = 120;
+    var calMes = null; // primeiro dia do mês mostrado
+    function iso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+    function deIso(s) { var p = s.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); }
+    function dataMaxima() { var d = new Date(); d.setDate(d.getDate() + LIMITE_DIAS); return iso(d); }
+    function horarioDoDia(s) {
+      var H = C.horarios || [];
+      if (!H.some(Boolean)) return { abre: '08:00', fecha: '18:00' };
+      return H[deIso(s).getDay()] || null;
+    }
+    function dataLivre(s) { return s <= dataMaxima() && !dataIndisponivel(s) && !!horarioDoDia(s); }
+    function sugestoes(n) {
+      var r = [], d = deIso(dataMinima());
+      for (var i = 0; i < LIMITE_DIAS && r.length < n; i++, d.setDate(d.getDate() + 1)) if (dataLivre(iso(d))) r.push(iso(d));
+      return r;
+    }
+    function horariosDoDia(s) {
+      var h = horarioDoDia(s); if (!h) return [];
+      var a = toMin(h.abre), f = toMin(h.fecha), r = [];
+      if (f <= a) f = 24 * 60;
+      for (var m = a; m <= f - 30; m += 30) r.push(String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'));
+      return r;
+    }
+    function rotuloCurto(s) { var d = deIso(s); return DIAS_CURTOS[d.getDay()] + ', ' + String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0'); }
+    function calendarioHtml() {
+      if (!calMes) { var base = deIso(form.data && dataLivre(form.data) ? form.data : (sugestoes(1)[0] || dataMinima())); calMes = new Date(base.getFullYear(), base.getMonth(), 1); }
+      var ano = calMes.getFullYear(), mes = calMes.getMonth(), inicio = calMes.getDay(), total = new Date(ano, mes + 1, 0).getDate();
+      var hoje = iso(new Date());
+      var temAnterior = iso(new Date(ano, mes, 0)) >= dataMinima(), temProximo = iso(new Date(ano, mes + 1, 1)) <= dataMaxima();
+      var cel = '';
+      for (var v = 0; v < inicio; v++) cel += '<span></span>';
+      for (var dia = 1; dia <= total; dia++) {
+        var s = iso(new Date(ano, mes, dia)), livre = dataLivre(s);
+        cel += '<button type="button" class="dia' + (s === form.data ? ' sel' : '') + (s === hoje ? ' hoje' : '') + '"' +
+          (livre ? ' data-dia="' + s + '"' : ' disabled') + ' aria-label="' + dia + ' de ' + MESES[mes] + (livre ? '' : ', indisponível') + '">' + dia + '</button>';
+      }
+      return '<div class="cal"><div class="cal-topo"><button type="button" data-mes="-1" aria-label="Mês anterior"' + (temAnterior ? '' : ' disabled') + '>‹</button>' +
+        '<b>' + MESES[mes] + ' ' + ano + '</b><button type="button" data-mes="1" aria-label="Próximo mês"' + (temProximo ? '' : ' disabled') + '>›</button></div>' +
+        '<div class="cal-sem">' + DIAS_CURTOS.map(function (d) { return '<span>' + d.charAt(0) + '</span>'; }).join('') + '</div>' +
+        '<div class="cal-dias">' + cel + '</div></div>';
+    }
     function encomendaHtml() {
       if (!pedidos.encomenda || form.tipo === 'mesa') return '';
       var quando = form.tipo === 'entrega' ? 'entrega' : 'retirada';
-      var B = bloqueadas();
-      var agenda = (SEM.length ? 'Não fazemos encomendas ' + SEM.map(function (d) { return PLURAL[d]; }).join(', ') + '. ' : '') +
-        (B.length ? 'Datas sem vaga: ' + B.slice(0, 8).map(dataBR).join(', ') + '.' : '');
+      if (form.data && !dataLivre(form.data)) form.data = '';
+      var horas = form.data ? horariosDoDia(form.data) : [];
+      if (horas.indexOf(form.hora) < 0) form.hora = '';
       return (pedidos.avisoEncomenda ? '<p class="aviso">' + esc(pedidos.avisoEncomenda) + '</p>' : '') +
-        (agenda ? '<p class="aviso">' + esc(agenda) + '</p>' : '') +
-        '<div class="linha-2"><label><span>Data da ' + quando + '</span><input type="date" name="data" required min="' + dataMinima() + '" value="' + esc(form.data) + '"></label>' +
-        '<label><span>Horário</span><input type="time" name="hora" required value="' + esc(form.hora) + '"></label></div>';
+        '<div class="agenda"><span class="ag-tit">Data da ' + quando + '</span>' +
+        '<div class="ag-sug">' + sugestoes(4).map(function (s) {
+          return '<button type="button" class="chip-data' + (s === form.data ? ' sel' : '') + '" data-dia="' + s + '">' + rotuloCurto(s) + '</button>';
+        }).join('') + '</div>' + calendarioHtml() +
+        '<input type="hidden" name="data" required value="' + esc(form.data) + '">' +
+        (form.data ? '<p class="ag-escolhida">' + ICON.cal + 'Escolhida: <b>' + esc(rotuloCurto(form.data)) + '/' + form.data.slice(0, 4) + '</b></p>' : '') + '</div>' +
+        '<label><span>Horário da ' + quando + '</span><select name="hora" required' + (form.data ? '' : ' disabled') + '>' +
+        '<option value="">' + (form.data ? 'Escolha o horário' : 'Escolha a data primeiro') + '</option>' + horas.map(function (h) {
+          return '<option' + (h === form.hora ? ' selected' : '') + '>' + h + '</option>';
+        }).join('') + '</select></label>';
+    }
+    // redesenha o pedido sem perder a posição da rolagem
+    function redesenhar() {
+      var corpo = $('.drawer-body', drawer), y = corpo ? corpo.scrollTop : 0;
+      renderCarrinho();
+      corpo = $('.drawer-body', drawer); if (corpo) corpo.scrollTop = y;
     }
     function dataBR(iso) { var p = String(iso || '').split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : iso; }
     function lerForm() {
@@ -602,18 +659,23 @@
       store.set(KEY + ':cliente', { nome: form.nome, endereco: form.endereco, referencia: form.referencia, pagamento: form.pagamento, tipo: form.tipo });
     }
     drawer.addEventListener('change', function (e) {
-      if (e.target.name === 'data') {
-        var msg = dataIndisponivel(e.target.value);
-        if (msg) { toast(msg); e.target.value = ''; e.target.classList.add('erro'); form.data = ''; return; }
-        e.target.classList.remove('erro');
-      }
       if (e.target.name === 'tipo' || e.target.name === 'pagamento') {
-        lerForm(); renderCarrinho();
+        lerForm(); redesenhar();
         var alvo = $('[name="' + e.target.name + '"]' + (e.target.type === 'radio' ? ':checked' : ''), drawer); if (alvo) alvo.focus();
       }
     });
     drawer.addEventListener('input', lerForm);
     drawer.addEventListener('click', function (e) {
+      var dia = e.target.closest('[data-dia]');
+      if (dia) {
+        lerForm(); form.data = dia.dataset.dia;
+        var d = deIso(form.data); calMes = new Date(d.getFullYear(), d.getMonth(), 1);
+        redesenhar();
+        var hora = $('[name=hora]', drawer); if (hora) hora.focus({ preventScroll: true });
+        return;
+      }
+      var mes = e.target.closest('[data-mes]');
+      if (mes) { lerForm(); calMes = new Date(calMes.getFullYear(), calMes.getMonth() + +mes.dataset.mes, 1); redesenhar(); return; }
       var b = e.target.closest('[data-l]');
       if (b) {
         lerForm();
@@ -625,9 +687,13 @@
     });
     function enviar() {
       var faltando = $$('[required]', drawer).filter(function (el) { return !el.value.trim(); });
-      if (faltando.length) { faltando[0].focus(); faltando[0].classList.add('erro'); toast('Preencha os campos obrigatórios'); return; }
+      if (faltando.length) {
+        var el = faltando[0];
+        if (el.name === 'data') { var ag = $('.agenda', drawer); ag.classList.add('erro'); ag.scrollIntoView({ block: 'center', behavior: 'smooth' }); toast('Escolha a data no calendário'); return; }
+        el.focus(); el.classList.add('erro'); toast(el.name === 'hora' ? 'Escolha o horário' : 'Preencha os campos obrigatórios'); return;
+      }
       var campoData = $('[name=data]', drawer), msgData = campoData && dataIndisponivel(campoData.value);
-      if (msgData) { campoData.focus(); campoData.classList.add('erro'); toast(msgData); return; }
+      if (msgData) { toast(msgData); return; }
       var L = [];
       L.push('*Novo pedido — ' + C.nome + '*', '');
       carrinho.forEach(function (l) {

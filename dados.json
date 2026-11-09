@@ -53,7 +53,10 @@
   },
   "mostrarHorario": true,
   "horarios": [
-    null,
+    {
+      "abre": "08:00",
+      "fecha": "18:00"
+    },
     {
       "abre": "08:00",
       "fecha": "19:00"

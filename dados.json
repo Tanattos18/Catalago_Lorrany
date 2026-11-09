@@ -88,8 +88,8 @@
     "mesa": false,
     "mesas": 0,
     "encomenda": true,
-    "antecedenciaDias": 2,
-    "avisoEncomenda": "Encomendas com no mínimo 2 dias de antecedência. A confirmação é feita pelo WhatsApp.",
+    "antecedenciaDias": 3,
+    "avisoEncomenda": "Encomendas com no mínimo 3 dias de antecedência. A confirmação é feita pelo WhatsApp.",
     "datasBloqueadas": [],
     "diasSemEncomenda": []
   },

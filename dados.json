@@ -79,7 +79,7 @@
     },
     {
       "abre": "08:00",
-      "fecha": "14:00"
+      "fecha": "19:00"
     }
   ],
   "pedidos": {
@@ -104,8 +104,8 @@
     "pix": {
       "ativo": true,
       "tipo": "telefone",
-      "chave": "",
-      "titular": "",
+      "chave": "62991751262",
+      "titular": "Lorrany Batista",
       "cidade": "Goiânia"
     },
     "credito": true,
@@ -115,7 +115,7 @@
     "linkCartao": "",
     "transferencia": false,
     "contas": [],
-    "sinal": ""
+    "sinal": "Sinal de 50% para confirmar a encomenda."
   },
   "bolosKg": {
     "pesos": [

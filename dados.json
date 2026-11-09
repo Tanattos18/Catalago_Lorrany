@@ -83,7 +83,7 @@
     }
   ],
   "pedidos": {
-    "entrega": true,
+    "entrega": false,
     "retirada": true,
     "mesa": false,
     "mesas": 0,

@@ -377,8 +377,13 @@
           '<p class="rot">Personalização</p>' +
           fLista('Coberturas', 'bolosKg.coberturas', 'Uma por linha (ex.: Chantilly). Deixe vazio para não perguntar.') +
           fCheck('Pedir nome e idade para escrever no bolo', 'bolosKg.pedirNome') +
-          fCheck('Oferecer topo de bolo personalizado', 'bolosKg.topo.ativo', '', true) +
-          (kg.topo && kg.topo.ativo ? fNum('Preço do topo (R$)', 'bolosKg.topo.preco') : ''),
+          fCheck('Oferecer topper de bolo', 'bolosKg.topo.ativo', 'Enfeite colocado no topo do bolo. O cliente marca se quer e conta o tema.', true) +
+          (kg.topo && kg.topo.ativo ? fNum('Preço do topper (R$)', 'bolosKg.topo.preco', 'Deixe em branco ou 0 para mostrar "Por orçamento" (o valor não entra no total do pedido).') +
+            '<p class="rot">Fotos de exemplo do topper</p>' + (kg.topo.exemplos || []).map(function (x, i) {
+              var k = 'bolosKg.topo.exemplos.' + i;
+              return '<div class="bloco">' + fFoto('Exemplo ' + (i + 1), k + '.img', 600) + fTexto('Legenda', k + '.legenda', 'Ex.: Feliz aniversário, Personagem.') +
+                '<button type="button" class="btn btn-sm btn-ghost" data-acao="remover" data-k="' + k + '">Excluir exemplo</button></div>';
+            }).join('') + '<button type="button" class="btn btn-sm" data-acao="add-exemplo-topper">+ Adicionar foto de exemplo</button>' : ''),
         'Vale para todos os produtos com preço "por kg".');
     },
 
@@ -739,6 +744,7 @@
     else if (a === 'add-conta') { D.pagamento.contas.push({ banco: '', agencia: '', conta: '', tipo: 'Conta corrente', titular: '', documento: '' }); salvarRascunho(); render(); }
     else if (a === 'add-massa') { D.bolosKg.massas.push({ nome: '', acrescimo: 0, porKg: false }); salvarRascunho(); render(); }
     else if (a === 'add-galeria') { (D.galeria = D.galeria || []).push(''); render(); }
+    else if (a === 'add-exemplo-topper') { (D.bolosKg.topo.exemplos = D.bolosKg.topo.exemplos || []).push({ img: '', legenda: '' }); salvarRascunho(); render(); }
     else if (a === 'add-depoimento') { (D.depoimentos = D.depoimentos || []).push({ nome: '', texto: '', foto: '' }); salvarRascunho(); render(); }
     else if (a === 'add-data') {
       var nd = $('[data-nova-data]').value;
@@ -809,6 +815,7 @@
     dados.pedidos.datasBloqueadas = (dados.pedidos.datasBloqueadas || []).filter(function (d) { return d >= hoje; });
     dados.galeria = (dados.galeria || []).filter(Boolean);
     dados.depoimentos = (dados.depoimentos || []).filter(function (d) { return d.texto; });
+    dados.bolosKg.topo.exemplos = (dados.bolosKg.topo.exemplos || []).filter(function (x) { return x && x.img; });
     dados.categorias.forEach(function (c) {
       c.itens.forEach(function (it) { if (it.sabores && !(it.sabores.lista || []).length) delete it.sabores; });
     });
@@ -882,6 +889,7 @@
     j.pagamento = j.pagamento || {}; j.pagamento.pix = j.pagamento.pix || {}; j.pagamento.contas = j.pagamento.contas || [];
     j.bolosKg = j.bolosKg || { pesos: [1, 2, 3], massas: [] }; j.bolosKg.massas = j.bolosKg.massas || [];
     j.bolosKg.topo = j.bolosKg.topo || { ativo: false, preco: 0 };
+    j.bolosKg.topo.exemplos = j.bolosKg.topo.exemplos || [];
     j.depoimentos = j.depoimentos || [];
     j.categorias.forEach(function (c) { c.itens = c.itens || []; });
     return j;

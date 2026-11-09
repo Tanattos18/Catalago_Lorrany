@@ -170,3 +170,14 @@ main > section > h2, .menu-head h2 { font-family: var(--font-title); }
 .dia.sel { background: var(--pri); color: var(--pri-ink); }
 .ag-escolhida { display: flex; align-items: center; gap: 6px; margin: 0; font-size: .9rem; color: var(--pri); }
 .checkout select:disabled { opacity: .6; }
+
+/* topper de bolo */
+.topper-tit { margin: 0 0 6px; font-size: .82rem; font-weight: 700; color: var(--muted); }
+.topper-ex { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 4px; }
+.topper-ex figure { margin: 0; }
+.topper-ex img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: #fde3ec; }
+.topper-ex figcaption { margin-top: 3px; font-size: .7rem; line-height: 1.2; text-align: center; color: var(--muted); }
+@media (max-width: 380px) { .topper-ex { grid-template-columns: repeat(2, 1fr); } }
+.topper .orc { flex: none; font-size: .78rem; padding: 4px 10px; border-radius: 99px; background: #fde3ec; color: var(--pri); white-space: nowrap; }
+.topper-aviso { margin: 8px 0 0; font-size: .8rem; color: var(--muted); }
+.aviso-topper { margin-top: 0; }

@@ -1,7 +1,7 @@
 /* Service worker do painel: permite instalar como aplicativo. Sempre busca na rede
    (o painel precisa dos dados mais recentes); sem internet, mostra a última versão da tela. */
-var CACHE = 'painel-lorrany-v1';
-var TELA = ['./', 'admin.css?v=2', 'admin.js?v=2', '../assets/img/logo.png'];
+var CACHE = 'painel-lorrany-v3';
+var TELA = ['./', 'admin.css?v=2', 'admin.js?v=4', '../assets/img/logo.png'];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(TELA); }).then(function () { return self.skipWaiting(); }));

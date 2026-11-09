@@ -144,15 +144,33 @@
     "coberturas": [],
     "pedirNome": true,
     "topo": {
-      "ativo": false,
-      "preco": 0
+      "ativo": true,
+      "preco": 0,
+      "exemplos": [
+        {
+          "img": "1617272949720-7f735c54a1bc",
+          "legenda": "Feliz aniversário"
+        },
+        {
+          "img": "1771832961525-45fd28ae51be",
+          "legenda": "Tema com nome"
+        },
+        {
+          "img": "1765946024876-340da9de51b1",
+          "legenda": "Personagem e idade"
+        },
+        {
+          "img": "1741865079561-6cdf71f8b01c",
+          "legenda": "Casamento"
+        }
+      ]
     }
   },
   "categorias": [
     {
       "nome": "Bolos confeitados · R$ 80/kg",
       "icone": "🎂",
-      "desc": "Escolha a massa (branca ou chocolate) e o peso. Valor por kg.",
+      "desc": "Escolha a massa (branca ou chocolate) e o peso. Valor por kg. Topper de bolo por orçamento.",
       "itens": [
         {
           "nome": "Ninho com Sonho de Valsa",
@@ -213,7 +231,7 @@
     {
       "nome": "Bolos confeitados · R$ 85/kg",
       "icone": "🎂",
-      "desc": "Escolha a massa (branca ou chocolate) e o peso. Valor por kg.",
+      "desc": "Escolha a massa (branca ou chocolate) e o peso. Valor por kg. Topper de bolo por orçamento.",
       "itens": [
         {
           "nome": "Ninho com beijinho",
@@ -244,7 +262,7 @@
     {
       "nome": "Bolos confeitados · R$ 90/kg",
       "icone": "🎂",
-      "desc": "Escolha a massa (branca ou chocolate) e o peso. Valor por kg.",
+      "desc": "Escolha a massa (branca ou chocolate) e o peso. Valor por kg. Topper de bolo por orçamento.",
       "itens": [
         {
           "nome": "Ninho com geleia de morango",

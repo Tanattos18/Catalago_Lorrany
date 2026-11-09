@@ -453,8 +453,16 @@
           (COBERTURAS.length ? '<fieldset><legend>Cobertura <em>obrigatório</em></legend>' + COBERTURAS.map(function (c, i) {
             return '<label class="opt"><input type="radio" name="cobertura" value="' + i + '"' + (i === 0 ? ' checked' : '') + '><span>' + esc(c) + '</span></label>';
           }).join('') + '</fieldset>' : '') +
-          (TOPO ? '<fieldset><legend>Extras <em>opcional</em></legend><label class="opt"><input type="checkbox" name="topo"><span>Topo de bolo personalizado</span><b>' +
-            (kg.topo.preco ? '+ ' + brl(kg.topo.preco) : '') + '</b></label></fieldset>' : '') +
+          (TOPO ? '<fieldset class="topper"><legend>Topper de bolo <em>opcional</em></legend>' +
+            ((kg.topo.exemplos || []).filter(function (x) { return x && x.img; }).length ? '<p class="topper-tit">Exemplos de topper</p><div class="topper-ex">' +
+              kg.topo.exemplos.filter(function (x) { return x && x.img; }).map(function (x) {
+                return '<figure><img src="' + esc(img(x.img, 300)) + '" alt="' + esc(x.legenda || 'Exemplo de topper') + '" loading="lazy">' +
+                  (x.legenda ? '<figcaption>' + esc(x.legenda) + '</figcaption>' : '') + '</figure>';
+              }).join('') + '</div>' : '') +
+            '<label class="opt"><input type="checkbox" name="topo"><span>Quero topper no meu bolo</span>' +
+            '<b class="' + (kg.topo.preco ? '' : 'orc') + '">' + (kg.topo.preco ? '+ ' + brl(kg.topo.preco) : 'Por orçamento') + '</b></label>' +
+            (kg.topo.preco ? '' : '<p class="topper-aviso">O valor do topper não entra no total: o orçamento é enviado pelo WhatsApp, conforme o tema e o material.</p>') +
+            '</fieldset>' : '') +
           (kg.pedirNome ? '<label class="obs"><span>Nome e idade para escrever no bolo <em class="opc">opcional</em></span><input name="escrita" maxlength="60" placeholder="Ex.: Ana · 5 anos"></label>' : '') : '') +
         (temOp ? '<fieldset><legend>' + esc(it.opcoesTitulo || 'Escolha uma opção') + ' <em>obrigatório</em></legend>' + it.opcoes.map(function (o, i) {
           return '<label class="opt"><input type="radio" name="op" value="' + i + '"' + (i === 0 ? ' checked' : '') + '><span>' + esc(o.nome) + '</span><b>' + brl(o.preco) + '</b></label>';
@@ -484,7 +492,7 @@
           detalhe = kgTxt(peso) + (massa ? ' · ' + massa.nome : '');
           var cob = $('input[name=cobertura]:checked', modal);
           if (cob) extras.push('Cobertura: ' + COBERTURAS[+cob.value]);
-          if ($('input[name=topo]:checked', modal)) { extras.push('Topo de bolo personalizado'); extra += +kg.topo.preco || 0; }
+          if ($('input[name=topo]:checked', modal)) { extras.push(kg.topo.preco ? 'Topper de bolo' : 'Topper de bolo (por orçamento)'); extra += +kg.topo.preco || 0; }
           var escrita = $('input[name=escrita]', modal);
           if (escrita && escrita.value.trim()) extras.push('Escrever: ' + escrita.value.trim());
         } else {
@@ -516,6 +524,9 @@
       if (pedidos.mesa) tipos.push(['mesa', 'Na mesa']);
       if (!tipos.length) tipos.push(['retirada', 'A combinar']);
       return tipos;
+    }
+    function temTopperOrcamento() {
+      return carrinho.some(function (l) { return (l.adicionais || []).indexOf('Topper de bolo (por orçamento)') > -1; });
     }
     function renderCarrinho() {
       var tipos = tiposPedido();
@@ -555,6 +566,7 @@
         '<div class="drawer-foot"><dl><div><dt>Subtotal</dt><dd>' + brl(sub) + '</dd></div>' +
         (form.tipo === 'entrega' ? '<div><dt>Entrega</dt><dd>' + (aCombinar ? 'A combinar' : taxa ? brl(taxa) : 'Grátis') + '</dd></div>' : '') +
         '<div class="total"><dt>Total</dt><dd>' + brl(total) + (aCombinar ? ' <small>+ entrega</small>' : '') + '</dd></div></dl>' +
+        (temTopperOrcamento() ? '<p class="aviso aviso-topper">Topper de bolo: valor por orçamento, enviado pelo WhatsApp (não incluído no total).</p>' : '') +
         (minimoFalta ? '<p class="aviso">Pedido mínimo para entrega: ' + brl(entrega.pedidoMinimo) + '</p>' : '') +
         '<button class="btn btn-pri btn-enviar"' + (!carrinho.length || minimoFalta ? ' disabled' : '') + '>' + ICON.whatsapp + 'Enviar pedido pelo WhatsApp</button></div>';
       desenharQRs(drawer);
@@ -712,6 +724,7 @@
       if (pedidos.encomenda && form.tipo !== 'mesa' && form.data) L.push('*Encomenda para:* ' + dataBR(form.data) + (form.hora ? ' às ' + form.hora : ''));
       L.push('*Pagamento:* ' + form.pagamento + (/dinheiro/i.test(form.pagamento) && form.troco ? ' (troco para R$ ' + form.troco + ')' : ''));
       if (form.obs) L.push('*Obs.:* ' + form.obs);
+      if (temTopperOrcamento()) L.push('', '_Pedi topper de bolo: aguardo o orçamento do topper (não incluído no total)._');
       if (form.pagamento === 'Pix') L.push('', '_Vou enviar o comprovante do Pix por aqui._');
       window.open(wa(contato.whatsapp, L.join('\n')), '_blank', 'noopener');
       carrinho = []; salvar(); atualizarBarra(); fechar();
